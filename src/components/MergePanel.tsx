@@ -37,7 +37,7 @@
  * No manual rollback needed.
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { nip19 } from "nostr-tools";
 import type { NostrEvent } from "nostr-tools";
@@ -98,7 +98,7 @@ import {
 } from "@/factories/StatusChangeFactory";
 import type { CommitPerson } from "@/lib/git-objects";
 import type { Patch } from "@/casts/Patch";
-import type { GitGraspPool } from "@/lib/git-grasp-pool";
+import type { Commit, GitGraspPool } from "@/lib/git-grasp-pool";
 import type { ResolvedRepo, ResolvedPR } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
@@ -154,6 +154,16 @@ type MergeStep =
   | "done"
   | "failed";
 
+type MergePanelStatus =
+  | MergeabilityStatus
+  | PRMergeabilityStatus
+  | "detected-merged";
+
+interface DetectedMergeCommit {
+  hash: string;
+  subject: string;
+}
+
 interface PushDeliveryOutcome {
   cloneUrl: string;
   ok: boolean;
@@ -169,6 +179,57 @@ interface PushDeliverySummary {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Shallow recent-history scan; avoids walking hundreds/thousands of commits. */
+const DETECTED_MERGE_HISTORY_LIMIT = 100;
+
+function firstCommitSubject(message: string): string {
+  return message.split("\n", 1)[0]?.trim() ?? "";
+}
+
+function messageReferencesRootEvent(
+  message: string,
+  rootEventId: string,
+): boolean {
+  const re = /nostr:(nevent1[023456789acdefghjklmnpqrstuvwxyz]+)/g;
+  for (const match of message.matchAll(re)) {
+    const nevent = match[1];
+    if (!nevent) continue;
+    try {
+      const decoded = nip19.decode(nevent);
+      if (decoded.type === "nevent" && decoded.data.id === rootEventId) {
+        return true;
+      }
+    } catch {
+      // Ignore malformed nostr: lines in arbitrary commit messages.
+    }
+  }
+  return false;
+}
+
+function findDetectedNgitMergeCommit(
+  commits: Commit[],
+  rootEventId: string,
+  tipCommitId?: string,
+): DetectedMergeCommit | null {
+  const mergeSubjectPrefix = `Merge #${rootEventId.slice(0, 8)}:`;
+
+  for (const commit of commits) {
+    if (commit.parents.length < 2) continue;
+    if (tipCommitId && !commit.parents.includes(tipCommitId)) continue;
+
+    const subject = firstCommitSubject(commit.message);
+    const referencesRoot =
+      subject.startsWith(mergeSubjectPrefix) ||
+      messageReferencesRootEvent(commit.message, rootEventId);
+
+    if (referencesRoot) {
+      return { hash: commit.hash, subject };
+    }
+  }
+
+  return null;
+}
 
 /**
  * Returns true if a relay URL's hostname matches one of the Grasp server domains.
@@ -370,6 +431,9 @@ export function MergePanel({
   const [pushDelivery, setPushDelivery] = useState<PushDeliverySummary | null>(
     null,
   );
+  const [detectedMergeCommit, setDetectedMergeCommit] =
+    useState<DetectedMergeCommit | null>(null);
+  const [detectingMergeCommit, setDetectingMergeCommit] = useState(false);
 
   const supportsBrowserMerge = repo.graspCloneUrls.length > 0;
   const localMergeCommand = `ngit merge ${pr.rootEvent.id.slice(0, 8)} && git push`;
@@ -394,6 +458,66 @@ export function MergePanel({
   }, [account, profile]);
 
   const isPRType = pr.itemType === "pr";
+
+  const patchTipCommitId = useMemo(() => {
+    if (isPRType || !patchChain?.length) return undefined;
+    return patchChain[patchChain.length - 1]?.commitId;
+  }, [isPRType, patchChain]);
+
+  const detectionTipCommitId = isPRType ? pr.tip.commitId : patchTipCommitId;
+
+  useEffect(() => {
+    setDetectedMergeCommit(null);
+
+    if (
+      !gitPool ||
+      !defaultBranchHead ||
+      mergeStep !== "idle" ||
+      (pr.status !== "open" && pr.status !== "draft")
+    ) {
+      setDetectingMergeCommit(false);
+      return;
+    }
+
+    const abort = new AbortController();
+    setDetectingMergeCommit(true);
+
+    gitPool
+      .getCommitHistory(
+        defaultBranchHead,
+        DETECTED_MERGE_HISTORY_LIMIT,
+        abort.signal,
+        effectiveCloneUrls,
+      )
+      .then((commits) => {
+        if (abort.signal.aborted) return;
+        setDetectedMergeCommit(
+          commits
+            ? findDetectedNgitMergeCommit(
+                commits,
+                pr.rootEvent.id,
+                detectionTipCommitId,
+              )
+            : null,
+        );
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setDetectedMergeCommit(null);
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setDetectingMergeCommit(false);
+      });
+
+    return () => abort.abort();
+  }, [
+    gitPool,
+    defaultBranchHead,
+    effectiveCloneUrls,
+    mergeStep,
+    pr.rootEvent.id,
+    pr.status,
+    detectionTipCommitId,
+  ]);
 
   // Eagerly check mergeability — both strategies in parallel (patch-type only)
   const patchMergeability = usePatchMergeability(
@@ -448,6 +572,10 @@ export function MergePanel({
         mergeBaseMismatch: null,
       };
 
+  const displayedStatus: MergePanelStatus = detectedMergeCommit
+    ? "detected-merged"
+    : mergeability.status;
+
   const defaultBranchRef = `refs/heads/${defaultBranchName}`;
 
   // Grasp relay URLs: repo relays whose hostname matches a Grasp server domain
@@ -459,6 +587,7 @@ export function MergePanel({
   // Can we show the merge button?
   const canMerge =
     supportsBrowserMerge &&
+    !detectedMergeCommit &&
     mergeability.status === "ready" &&
     defaultBranchHead &&
     mergeStep === "idle";
@@ -466,12 +595,17 @@ export function MergePanel({
   // Can we show the apply-to-tip button? (patch-type only)
   const canApplyToTip =
     supportsBrowserMerge &&
+    !detectedMergeCommit &&
     !isPRType &&
     mergeability.status === "ready-apply-only" &&
     defaultBranchHead &&
     mergeStep === "idle";
 
-  const canShowLocalMerge = !supportsBrowserMerge && mergeStep === "idle";
+  const canShowLocalMerge =
+    !supportsBrowserMerge && !detectedMergeCommit && mergeStep === "idle";
+
+  const canMarkDetectedMerged =
+    !!account && !!detectedMergeCommit && mergeStep === "idle";
 
   const copyLocalMergeCommand = useCallback(async () => {
     try {
@@ -488,6 +622,70 @@ export function MergePanel({
       });
     }
   }, [localMergeCommand, toast]);
+
+  const publishMergedStatus = useCallback(
+    async (mergeCommitHash: string): Promise<void> => {
+      if (!account) return;
+
+      const statusKind = STATUS_KIND_MAP["resolved"];
+      const patchQuoteTags = (patchChain ?? []).map((patch) => [
+        "q",
+        patch.event.id,
+        "",
+        patch.pubkey,
+      ]);
+
+      const signedStatus = await StatusChangeFactory.create(
+        statusKind,
+        pr.rootEvent.id,
+        pr.repoCoords,
+        pr.pubkey,
+        account.pubkey,
+      )
+        .modifyPublicTags((tags) => [
+          ...tags,
+          ["merge-commit", mergeCommitHash],
+          ["r", mergeCommitHash],
+          ...patchQuoteTags,
+        ])
+        .sign(account.signer);
+
+      await outboxStore.publish(signedStatus, [
+        `outbox:${account.pubkey}`,
+        ...repo.allCoordinates,
+        ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
+      ]);
+      eventStore.add(signedStatus);
+    },
+    [account, patchChain, pr, repo.allCoordinates],
+  );
+
+  const handleMarkDetectedMerged = useCallback(async () => {
+    if (!account || !detectedMergeCommit) return;
+
+    setMergeStep("publishing-status");
+    setMergeError(null);
+    setPushDelivery(null);
+
+    try {
+      await publishMergedStatus(detectedMergeCommit.hash);
+      setMergeStep("done");
+      toast({
+        title: "Marked as merged",
+        description: `Detected merge commit ${detectedMergeCommit.hash.slice(0, 8)} and published the missing merged status.`,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not publish merged status";
+      setMergeStep("failed");
+      setMergeError(message);
+      toast({
+        title: "Could not mark as merged",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  }, [account, detectedMergeCommit, publishMergedStatus, toast]);
 
   // ── Push helper ──────────────────────────────────────────────────────────
 
@@ -886,7 +1084,7 @@ export function MergePanel({
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <div className="mt-0.5">
-            <StatusIcon status={mergeability.status} mergeStep={mergeStep} />
+            <StatusIcon status={displayedStatus} mergeStep={mergeStep} />
           </div>
 
           <div className="flex-1 min-w-0 space-y-2">
@@ -894,7 +1092,7 @@ export function MergePanel({
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <StatusHeadline
-                  status={mergeability.status}
+                  status={displayedStatus}
                   mergeStep={mergeStep}
                   mergeError={mergeError}
                   defaultBranchName={defaultBranchName}
@@ -917,6 +1115,12 @@ export function MergePanel({
                   </span>
                 )}
 
+                {detectingMergeCommit && !detectedMergeCommit && (
+                  <span className="text-xs text-muted-foreground">
+                    Checking recent history...
+                  </span>
+                )}
+
                 {(mergeability.status === "error" ||
                   mergeability.status === "conflicts" ||
                   mergeStep === "failed") && (
@@ -934,6 +1138,57 @@ export function MergePanel({
                     <RefreshCw className="h-3 w-3 mr-1" />
                     Recheck
                   </Button>
+                )}
+
+                {canMarkDetectedMerged && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        className="h-8 bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                        Mark merged
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Mark this PR as merged?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                          <div className="space-y-2 text-sm text-muted-foreground">
+                            <p>
+                              We found a recent ngit-style merge commit on{" "}
+                              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                                {defaultBranchName}
+                              </code>{" "}
+                              that references this {isPRType ? "PR" : "patch"}.
+                            </p>
+                            <p>
+                              This will not push git objects or change the
+                              branch. It only publishes the missing merged
+                              status event.
+                            </p>
+                            <p className="font-mono text-xs text-foreground">
+                              {detectedMergeCommit.hash.slice(0, 8)} {" — "}
+                              {detectedMergeCommit.subject || "merge commit"}
+                            </p>
+                          </div>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleMarkDetectedMerged}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                          Publish merged status
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 )}
 
                 {canMerge && (
@@ -1121,6 +1376,32 @@ export function MergePanel({
               </div>
             )}
 
+            {/* Best-effort already-merged detection */}
+            {detectedMergeCommit && mergeStep === "idle" && (
+              <div className="rounded-md border border-green-600/30 bg-green-600/5 px-3 py-2 text-xs text-green-700 dark:text-green-400">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <p>
+                      <span className="font-medium">
+                        This {isPRType ? "PR" : "patch"} appears to already be
+                        merged.
+                      </span>{" "}
+                      We found a recent ngit-style merge commit on{" "}
+                      <code className="rounded bg-muted px-0.5 font-mono text-[10px] text-foreground">
+                        {defaultBranchName}
+                      </code>
+                      , but no merged status event is present yet.
+                    </p>
+                    <p className="font-mono text-[10px] text-muted-foreground">
+                      {detectedMergeCommit.hash.slice(0, 8)} {" — "}
+                      {detectedMergeCommit.subject || "merge commit"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* GRASP push delivery summary */}
             {mergeStep === "done" && pushDelivery && (
               <PushDeliverySummaryView summary={pushDelivery} />
@@ -1247,7 +1528,7 @@ function StatusIcon({
   status,
   mergeStep,
 }: {
-  status: MergeabilityStatus | PRMergeabilityStatus;
+  status: MergePanelStatus;
   mergeStep: MergeStep;
 }) {
   if (mergeStep === "done") {
@@ -1264,6 +1545,7 @@ function StatusIcon({
     case "loading":
       return <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />;
     case "ready":
+    case "detected-merged":
       return <CheckCircle2 className="h-5 w-5 text-green-600" />;
     case "ready-apply-only":
       return <AlertTriangle className="h-5 w-5 text-amber-500" />;
@@ -1286,7 +1568,7 @@ function StatusHeadline({
   isBaseGuessed,
   isPRType,
 }: {
-  status: MergeabilityStatus | PRMergeabilityStatus;
+  status: MergePanelStatus;
   mergeStep: MergeStep;
   mergeError: string | null;
   defaultBranchName: string;
@@ -1360,6 +1642,20 @@ function StatusHeadline({
               encoding).
             </p>
           )}
+        </div>
+      );
+    case "detected-merged":
+      return (
+        <div>
+          <p className="text-sm font-medium text-green-600">
+            Detected already merged into{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+              {defaultBranchName}
+            </code>
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Publish the missing merged status event to update this PR.
+          </p>
         </div>
       );
     case "ready-apply-only":
