@@ -40,6 +40,7 @@ import {
   LEGACY_REPLY_KINDS,
   COVER_NOTE_KIND,
 } from "@/lib/nip34";
+import { CI_RUN_KIND, CI_RESULT_KIND } from "@/lib/ci";
 import { Repository, isValidRepository } from "@/casts/Repository";
 import {
   createPaginatedTagValueLoader,
@@ -548,8 +549,9 @@ export const nip05WarmupReady: Promise<void> = loadAllNip05FromIdb().then(
 // List level — essentials + comments
 //   Essentials (#e tag, bufferTime: 100ms): status (1630-1633), labels (1985),
 //   and deletions (5) for every item on the page.
-//   Comments (#E tag, bufferTime: 500ms): NIP-22 comments (1111) and PR
-//   updates (1619). The longer buffer ensures essentials land first.
+//   Comments (#E tag, bufferTime: 500ms): NIP-22 comments (1111), PR
+//   updates (1619), and CI results (9842). The longer buffer ensures
+//   essentials land first.
 //
 // Thread level — all child events, no kind restriction (detail pages only)
 //   Three loaders for the three tag names used to reference thread members:
@@ -602,7 +604,10 @@ export const nip34EssentialsLoader = createPaginatedTagValueLoader(pool, "e", {
 
 /**
  * Comments loader (#E tag).
- * Fetches NIP-22 comments (kind 1111) and PR updates (kind 1619).
+ * Fetches NIP-22 comments (kind 1111), PR updates (kind 1619), and CI
+ * workflow results (kind 9842 — ngit-ci results tag the PR root via
+ * NIP-22-style #E, so they ride along with comments and power the CI
+ * check badges on PR lists).
  * Uses the uppercase `E` root tag, so it needs its own loader instance
  * separate from the `#e` loaders. The longer buffer ensures essentials
  * land first.
@@ -610,7 +615,7 @@ export const nip34EssentialsLoader = createPaginatedTagValueLoader(pool, "e", {
 export const nip34CommentsLoader = createPaginatedTagValueLoader(pool, "E", {
   cacheRequest,
   eventStore,
-  kinds: [1111, 1619],
+  kinds: [1111, 1619, CI_RESULT_KIND],
   bufferTime: NIP34_COMMENTS_BUFFER,
 });
 
@@ -999,7 +1004,12 @@ export function nip34RepoLoader(
 
     const repoMetaFilters = [
       {
-        kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND, 9735],
+        // Reactions (stars), follow lists, zaps — plus kind:9841 CI
+        // "workflow started" running markers. The markers carry a NIP-40
+        // expiration so the live set for a repo stays small; fetching them
+        // repo-wide via #a keeps pending indicators available everywhere
+        // (PR lists, PR pages) without per-item subscriptions.
+        kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND, 9735, CI_RUN_KIND],
         "#a": coords,
       } as Filter,
     ];

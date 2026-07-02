@@ -24,6 +24,9 @@ import {
 } from "@/components/ui/select";
 import { Search, MessageCircle, Users, X, Zap } from "lucide-react";
 import type { IssueStatus, ResolvedPRLite, PRItemType } from "@/lib/nip34";
+import { useCIForPR } from "@/hooks/useCI";
+import { CIStatusIcon } from "@/components/ci/CIStatusIcon";
+import { ciStatusLabel } from "@/lib/ci";
 
 const TYPE_OPTIONS: MultiSelectOption[] = [
   { value: "pr", label: "Pull Requests" },
@@ -274,6 +277,11 @@ function PRRow({
     addSuffix: true,
   });
 
+  // CI check rollup for the most recent commit with CI activity. Store-read
+  // only — kind:9842 results ride along with the #E comments loader and
+  // kind:9841 running markers with the repo-level #a meta subscription.
+  const ci = useCIForPR(pr.id);
+
   const nevent = eventIdToNevent(pr.id, repoRelays.slice(0, 1));
 
   return (
@@ -295,6 +303,14 @@ function PRRow({
             <span className="font-medium text-foreground group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors line-clamp-1">
               {pr.currentSubject}
             </span>
+            {ci?.status && (
+              <span
+                title={`Checks: ${ciStatusLabel(ci.status).toLowerCase()}`}
+                className="inline-flex shrink-0"
+              >
+                <CIStatusIcon status={ci.status} className="h-3.5 w-3.5" />
+              </span>
+            )}
             {pr.labels.map((label) => (
               <LabelBadge
                 key={label}

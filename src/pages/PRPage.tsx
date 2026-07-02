@@ -76,6 +76,8 @@ import { useCommitHistory } from "@/hooks/useGitExplorer";
 import { usePRMergeBase } from "@/hooks/usePRMergeBase";
 import { usePatchMergeBase } from "@/hooks/usePatchMergeBase";
 import { MergePanel } from "@/components/MergePanel";
+import { CIChecksPanel } from "@/components/ci/CIChecksPanel";
+import { useCIForPR } from "@/hooks/useCI";
 import { CommitDetailView } from "@/components/CommitDetailView";
 import { PatchCommitDetailView } from "@/components/PatchCommitDetailView";
 import { useEventStore } from "@/hooks/useEventStore";
@@ -335,6 +337,11 @@ export default function PRPage() {
   const handleSuccessfulPush = useCallback(() => {
     if (pr?.rootEvent.id) setLocallyMergedPrId(pr.rootEvent.id);
   }, [pr?.rootEvent.id]);
+
+  // ── CI checks (ngit-ci kinds 9841/9842) ──────────────────────────────────
+  // Store-read only — 9842 results arrive via the #E comments loader and
+  // 9841 running markers via the repo-level #a meta subscription.
+  const ciChecks = useCIForPR(pr?.rootEvent.id, pr?.tip.commitId);
 
   // Ordered priority pubkeys for @ mention autocomplete:
   // parent author first, then participants, then maintainers (deduped).
@@ -1521,6 +1528,12 @@ export default function PRPage() {
                     </div>
                   )}
                 </div>
+
+                {/* CI checks — shown to everyone whenever any CI runner has
+                    published workflow runs/results for this PR */}
+                {pr && ciChecks && ciChecks.runs.length > 0 && (
+                  <CIChecksPanel checks={ciChecks} />
+                )}
 
                 {/* Merge panel — shown for PRs and patches on git-backed repos, for maintainers */}
                 {pr &&
