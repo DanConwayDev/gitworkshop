@@ -11,7 +11,14 @@
  * Update trigger) tags, so results for a PR are fetched via #E alongside
  * comments. For commit status ticks (CodeBar, commit history, commit page)
  * results are fetched by #c for the commits being displayed via the batched
- * ciResultsByCommitLoader singleton.
+ * ciResultsByCommitLoader singleton. The repo Actions tab fetches all
+ * results repo-wide by #a on demand (useRepoCI).
+ *
+ * Multi-maintainer repos are announced under one coordinate per maintainer,
+ * so CI events may carry multiple `a` tags — one per coordinate. All #a
+ * fetches and store reads pass the repo's full coordinate set
+ * (repo.allCoordinates) so events tagged under any maintainer's coordinate
+ * are found.
  *
  * Trust model: none yet — all CI events are displayed regardless of signer.
  * The runner identity is always shown next to results so users can judge for
@@ -81,6 +88,10 @@ export interface CIWorkflowRun {
   runner: string | undefined;
   /** Optional platform tag (github-actions | forgejo-actions | gitlab-ci). */
   platform: string | undefined;
+  /** Push trigger branch ref (`r` tag, e.g. refs/heads/main), when present. */
+  branchRef: string | undefined;
+  /** Root PR event id (`E` tag) for PR-triggered workflows, when present. */
+  prRootId: string | undefined;
   /** Latest result per job id, sorted by job id. */
   jobs: CIJobResult[];
   /**
@@ -145,6 +156,8 @@ export function groupCIWorkflowRuns(
     trigger: string | undefined;
     runner: string | undefined;
     platform: string | undefined;
+    branchRef: string | undefined;
+    prRootId: string | undefined;
     latestPerJob: Map<string, CIResult>;
     latestResultAt: number;
     pendingRun: CIRun | undefined;
@@ -165,6 +178,8 @@ export function groupCIWorkflowRuns(
         trigger: ev.trigger,
         runner: ev.runner,
         platform: ev.platform,
+        branchRef: ev.branchRef,
+        prRootId: ev.prRootId,
         latestPerJob: new Map(),
         latestResultAt: 0,
         pendingRun: undefined,
@@ -176,6 +191,8 @@ export function groupCIWorkflowRuns(
     group.trigger ??= ev.trigger;
     group.runner ??= ev.runner;
     group.platform ??= ev.platform;
+    group.branchRef ??= ev.branchRef;
+    group.prRootId ??= ev.prRootId;
     group.createdAt = Math.max(group.createdAt, ev.event.created_at);
     return group;
   };
@@ -230,6 +247,8 @@ export function groupCIWorkflowRuns(
       trigger: group.trigger,
       runner: group.runner,
       platform: group.platform,
+      branchRef: group.branchRef,
+      prRootId: group.prRootId,
       jobs,
       pendingRun,
       status,

@@ -16,6 +16,17 @@
  * within the buffer window batch into one REQ per relay — and read both
  * kinds back from the store by #c.
  *
+ * useRepoCI — repo-wide workflow runs for the Actions tab. Fires a live
+ * #a subscription for both kinds against the repo relay group and reads
+ * them back from the store.
+ *
+ * useRepoHasCI — cheap presence probe (limit-1 one-shot request) used to
+ * decide whether to show the Actions tab at all.
+ *
+ * Multi-maintainer repos are announced under one coordinate per maintainer
+ * and CI events may carry multiple `a` tags — every #a filter here takes the
+ * repo's full coordinate set (repo.allCoordinates).
+ *
  * No trust filtering is applied — all runner identities are displayed and
  * the UI shows who signed each result.
  */
@@ -31,7 +42,13 @@ import { combineLatest, timer, merge, EMPTY } from "rxjs";
 import { map, catchError } from "rxjs/operators";
 import { CIRun, isValidCIRun } from "@/casts/CIRun";
 import { CIResult, isValidCIResult } from "@/casts/CIResult";
-import { ciResultsByCommitLoader } from "@/services/nostr";
+import { ciResultsByCommitLoader, pool } from "@/services/nostr";
+import {
+  resilientRequest,
+  resilientSubscription,
+} from "@/lib/resilientSubscription";
+import { mapEventsToStore } from "applesauce-core";
+import { onlyEvents } from "applesauce-relay";
 import { relayGroupUrls$ } from "@/models/RepositoryRelayGroup";
 import {
   CI_RUN_KIND,
@@ -244,4 +261,126 @@ export function useCIForCommit(
   const ids = useMemo(() => (commitId ? [commitId] : []), [commitId]);
   const checks = useCIForCommits(ids, repoRelayGroup);
   return commitId ? checks?.get(commitId) : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Repo-wide checks (Actions tab)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reactively resolve all CI workflow runs for a repository — the data source
+ * for the repo Actions tab.
+ *
+ * Fires a live #a subscription for both kinds against the repo relay group
+ * (CI events on multi-maintainer repos may tag any of the repo's
+ * coordinates, so the full coordinate set is passed) and reads them back
+ * from the store grouped into workflow runs, most recent first.
+ *
+ * @param repoCoords     - The repo's full coordinate set (repo.allCoordinates)
+ * @param repoRelayGroup - Repo relay group from useResolvedRepository
+ */
+export function useRepoCI(
+  repoCoords: string[] | undefined,
+  repoRelayGroup: RelayGroup | undefined,
+): CIWorkflowRun[] | undefined {
+  const store = useEventStore();
+
+  // Stable key — re-subscribes only when the coordinate set actually changes
+  const coordsKey = repoCoords ? [...repoCoords].sort().join(",") : "";
+
+  // Reactive relay list — re-fires the subscription when the group gains relays
+  const relays =
+    use$(() => relayGroupUrls$(repoRelayGroup), [repoRelayGroup]) ?? [];
+  const relayKey = relays.join(",");
+
+  // Layer 1: fetch results + running markers repo-wide by #a.
+  use$(() => {
+    if (!repoCoords || repoCoords.length === 0 || relays.length === 0)
+      return undefined;
+    return resilientSubscription(pool, relays, [
+      { kinds: [CI_RUN_KIND, CI_RESULT_KIND], "#a": repoCoords } as Filter,
+    ]).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+      catchError(() => EMPTY),
+    );
+  }, [coordsKey, relayKey, store]);
+
+  // Layer 2: read both kinds back from the store and group.
+  return use$(() => {
+    if (!repoCoords || repoCoords.length === 0) return undefined;
+    const castStore = store as unknown as CastRefEventStore;
+
+    const results$ = store.timeline([
+      { kinds: [CI_RESULT_KIND], "#a": repoCoords } as Filter,
+    ]);
+    const runMarkers$ = store.timeline([
+      { kinds: [CI_RUN_KIND], "#a": repoCoords } as Filter,
+    ]);
+
+    return combineLatest([
+      results$,
+      runMarkers$,
+      timer(0, EXPIRY_RECHECK_INTERVAL_MS),
+    ]).pipe(
+      map(([resultEvents, runEvents]) =>
+        castAndGroupCIEvents(
+          resultEvents as NostrEvent[],
+          runEvents as NostrEvent[],
+          castStore,
+        ),
+      ),
+    );
+  }, [coordsKey, store]);
+}
+
+/**
+ * Cheap presence probe — does this repo have any CI events at all?
+ *
+ * Fires a one-shot limit-1 request for both kinds by #a (re-fired when the
+ * relay group gains relays) and reads the store reactively, so events that
+ * arrived via any other loader (#E comment ride-along, repo-wide 9841
+ * markers, #c commit ticks) also flip it to true.
+ *
+ * Used by RepoLayout to decide whether to show the Actions tab.
+ */
+export function useRepoHasCI(
+  repoCoords: string[] | undefined,
+  repoRelayGroup: RelayGroup | undefined,
+): boolean {
+  const store = useEventStore();
+
+  const coordsKey = repoCoords ? [...repoCoords].sort().join(",") : "";
+
+  const relays =
+    use$(() => relayGroupUrls$(repoRelayGroup), [repoRelayGroup]) ?? [];
+  const relayKey = relays.join(",");
+
+  // Presence probe — one event per relay is enough to decide.
+  use$(() => {
+    if (!repoCoords || repoCoords.length === 0 || relays.length === 0)
+      return undefined;
+    return resilientRequest(pool, relays, [
+      {
+        kinds: [CI_RUN_KIND, CI_RESULT_KIND],
+        "#a": repoCoords,
+        limit: 1,
+      } as Filter,
+    ]).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+      catchError(() => EMPTY),
+    );
+  }, [coordsKey, relayKey, store]);
+
+  const hasCI = use$(() => {
+    if (!repoCoords || repoCoords.length === 0) return undefined;
+    return store
+      .timeline([
+        { kinds: [CI_RUN_KIND, CI_RESULT_KIND], "#a": repoCoords } as Filter,
+      ])
+      .pipe(map((events) => events.length > 0));
+  }, [coordsKey, store]);
+
+  return hasCI ?? false;
 }

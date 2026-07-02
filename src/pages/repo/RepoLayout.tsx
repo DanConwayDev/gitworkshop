@@ -11,10 +11,12 @@ import RepoCommitsPage from "./RepoCommitsPage";
 import RepoCommitPage from "./RepoCommitPage";
 import RepoBranchesPage from "./RepoBranchesPage";
 import RepoTagsPage from "./RepoTagsPage";
+import RepoActionsPage from "./RepoActionsPage";
 import IssuePage from "@/pages/IssuePage";
 import PRPage from "@/pages/PRPage";
 import { useIssues } from "@/hooks/useIssues";
 import { usePRs } from "@/hooks/usePRs";
+import { useRepoHasCI } from "@/hooks/useCI";
 import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
 import { useDnsIdentity } from "@/hooks/useDnsIdentity";
 import { useRepositoryState } from "@/hooks/useRepositoryState";
@@ -39,6 +41,7 @@ import {
   Info,
   MoreHorizontal,
   Settings,
+  Workflow,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -242,6 +245,11 @@ function RepoLayoutResolved({
   const issues = useIssues(repo?.allCoordinates, repoRelayGroup, queryOptions);
   const prs = usePRs(repo?.allCoordinates, repoRelayGroup, queryOptions);
 
+  // Whether the repo has any CI events (ngit-ci kinds 9841/9842) — drives
+  // visibility of the Actions tab. Cheap limit-1 probe by #a across all
+  // maintainer coordinates.
+  const hasCI = useRepoHasCI(repo?.allCoordinates, repoRelayGroup);
+
   const [repoState, repoRelayEose, relayStateMap] = useRepositoryState(
     repo?.dTag,
     repo?.maintainerSet,
@@ -285,6 +293,7 @@ function RepoLayoutResolved({
       "/commits",
       "/branches",
       "/tags",
+      "/actions",
     ]) {
       const idx = full.indexOf(keyword);
       if (idx !== -1) return full.slice(0, idx);
@@ -298,6 +307,7 @@ function RepoLayoutResolved({
     location.pathname === `${basePath}/`;
   const isIssuesTab = location.pathname.startsWith(`${basePath}/issues`);
   const isPRsTab = location.pathname.startsWith(`${basePath}/prs`);
+  const isActionsTab = location.pathname.startsWith(`${basePath}/actions`);
   const isAboutTab = location.pathname.startsWith(`${basePath}/about`);
   const isSettingsTab = location.pathname.startsWith(`${basePath}/settings`);
   // Determine which sub-page to render from the splat segments.
@@ -321,6 +331,7 @@ function RepoLayoutResolved({
       | "commit"
       | "branches"
       | "tags"
+      | "actions"
       | "about"
       | "edit"
       | "settings";
@@ -402,6 +413,11 @@ function RepoLayoutResolved({
     const tagsIdx = segments.indexOf("tags");
     if (tagsIdx !== -1) {
       return { subPage: "tags" };
+    }
+
+    const actionsIdx = segments.indexOf("actions");
+    if (actionsIdx !== -1) {
+      return { subPage: "actions" };
     }
 
     const issuesIdx = segments.indexOf("issues");
@@ -550,6 +566,14 @@ function RepoLayoutResolved({
 
               {/* Secondary tabs — visible on md+ screens */}
               <div className="hidden md:flex gap-1">
+                {(hasCI || isActionsTab) && (
+                  <TabLink
+                    to={`${basePath}/actions`}
+                    active={isActionsTab}
+                    icon={<Workflow className="h-4 w-4" />}
+                    label="Actions"
+                  />
+                )}
                 <TabLink
                   to={`${basePath}/about`}
                   active={isAboutTab}
@@ -573,7 +597,7 @@ function RepoLayoutResolved({
                     <button
                       className={cn(
                         "inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
-                        isAboutTab || isSettingsTab
+                        isAboutTab || isSettingsTab || isActionsTab
                           ? "border-pink-500 text-foreground"
                           : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
                       )}
@@ -583,6 +607,17 @@ function RepoLayoutResolved({
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {(hasCI || isActionsTab) && (
+                      <DropdownMenuItem asChild>
+                        <Link
+                          to={`${basePath}/actions`}
+                          className="flex items-center gap-2"
+                        >
+                          <Workflow className="h-4 w-4" />
+                          Actions
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem asChild>
                       <Link
                         to={`${basePath}/about`}
@@ -624,6 +659,8 @@ function RepoLayoutResolved({
                 <RepoBranchesPage />
               ) : subPage === "tags" ? (
                 <RepoTagsPage />
+              ) : subPage === "actions" ? (
+                <RepoActionsPage />
               ) : subPage === "issue" ? (
                 <IssuePage />
               ) : subPage === "issues" ? (

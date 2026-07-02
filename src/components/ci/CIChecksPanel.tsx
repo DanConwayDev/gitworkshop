@@ -10,7 +10,7 @@
  * on every row so users can judge results for themselves.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ChevronRight, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -97,12 +97,18 @@ export function CIChecksPanel({ checks, className }: CIChecksPanelProps) {
   );
 }
 
-function CIRunRow({
+export function CIRunRow({
   run,
   defaultOpen = false,
+  triggerContext,
 }: {
   run: CIWorkflowRun;
   defaultOpen?: boolean;
+  /**
+   * Optional trigger context element (branch name, PR link) shown on the
+   * right of the row — used by the repo Actions tab.
+   */
+  triggerContext?: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -129,6 +135,7 @@ function CIRunRow({
           </CollapsibleTrigger>
 
           <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+            {triggerContext}
             {run.commitId && (
               <code className="hidden sm:inline font-mono text-[10px]">
                 {run.commitId.slice(0, 7)}

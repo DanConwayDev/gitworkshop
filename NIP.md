@@ -404,6 +404,8 @@ Both kinds share the common context tags:
 ]
 ```
 
+Multi-maintainer repositories are announced under one kind:30617 coordinate per maintainer, so CI events MAY carry **multiple `a` tags** — one per maintainer coordinate. gitworkshop passes the repo's full transitive coordinate set (see §"Repository authorization model" in `docs/matainership.md`) in every `#a` filter and store read, so an event tagged under any maintainer's coordinate is found.
+
 PR-triggered workflows additionally carry NIP-22-style trigger tags — uppercase `E`/`K`/`P` for the root PR (kind:1618) and lowercase `e`/`k`/`p` for the concrete trigger (the PR itself, or a kind:1619 PR Update). Push-triggered workflows carry `["r", "refs/heads/<branch>"]` instead.
 
 Result-specific tags on kind:9842: `job` (job identity, falls back to the workflow path), `status` (`success` | `failure` | `error` | `skipped`), `duration` (seconds), and optionally `exit_code`, `duration_ms`, `log_url`, `stage`.
@@ -415,15 +417,22 @@ Result-specific tags on kind:9842: `job` (job identity, falls back to the workfl
 { "kinds": [1111, 1619, 9842], "#E": ["<pr-or-patch-event-id>"] }
 
 // Running markers — fetched repo-wide; NIP-40 expiry keeps the set small
-{ "kinds": [9841], "#a": ["30617:<owner-pubkey>:<repo-id>"] }
+{ "kinds": [9841], "#a": ["30617:<maintainer-pubkey>:<repo-id>", "..."] }
 
 // Commit status ticks — batched per page of displayed commits
 { "kinds": [9842], "#c": ["<commit-id>", "<commit-id>", "..."] }
+
+// Actions tab — all runs repo-wide, fetched on demand
+{ "kinds": [9841, 9842], "#a": ["30617:<maintainer-pubkey>:<repo-id>", "..."] }
+
+// Actions tab visibility — one-shot limit-1 presence probe per repo visit
+{ "kinds": [9841, 9842], "#a": ["30617:<maintainer-pubkey>:<repo-id>", "..."], "limit": 1 }
 ```
 
 - **PR / patch pages and lists**: kind:9842 is fetched alongside NIP-22 comments via the `#E` root-tag loader, so PR list rows and detail pages get results with no extra subscriptions. The no-kind thread loader on detail pages also picks up both kinds.
 - **Kind:9841** is fetched once per repo via the `#a` coordinate filter in the repo meta subscription — because markers expire (NIP-40), the live set stays small. Expired markers are dropped at display time and re-checked periodically so pending spinners clear without a new event.
 - **Commit ticks** (CodeBar head commit, commit history rows, commit detail page) fetch kind:9842 by `#c` for exactly the commits being displayed; a singleton batched loader collapses a page of commits into one REQ per relay.
+- **Actions tab**: a repo-wide live `#a` subscription for both kinds runs only while the tab is open (kind:9842 events carry log tails and can be large, so this is not fetched eagerly). Tab visibility is decided by a cheap one-shot limit-1 probe fired from the repo layout, combined with any CI events already in the store from the other loaders.
 
 ### Interpretation rules
 

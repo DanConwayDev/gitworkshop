@@ -2,7 +2,10 @@
  * Shared base cast for ngit-ci CI events (kinds 9841 / 9842).
  *
  * Both kinds carry the same common CI context tags:
- *   ["a", "30617:<owner>:<repo-id>"]  — repository coordinate
+ *   ["a", "30617:<owner>:<repo-id>"]  — repository coordinate. Multi-maintainer
+ *                                       repos are announced under one coordinate
+ *                                       per maintainer, so CI events may carry
+ *                                       multiple `a` tags — one per coordinate.
  *   ["c", "<commit-id>"]              — commit the workflow ran against
  *   ["w", "<workflow-path>"]          — selected workflow file path
  *   ["x", "<trigger>"]                — push | pull_request | manual | schedule
@@ -20,6 +23,7 @@ import type { NostrEvent } from "nostr-tools";
 
 // Cache symbols (per-event caches, safe to share across both kinds)
 const RepoCoordSymbol = Symbol.for("ci-repo-coord");
+const RepoCoordsSymbol = Symbol.for("ci-repo-coords");
 const CommitIdSymbol = Symbol.for("ci-commit-id");
 const WorkflowPathSymbol = Symbol.for("ci-workflow-path");
 const TriggerSymbol = Symbol.for("ci-trigger");
@@ -37,10 +41,21 @@ export abstract class CIContextCast<
     return this.event.pubkey;
   }
 
-  /** Repository coordinate from the `a` tag (30617:<owner>:<repo-id>). */
+  /** First repository coordinate from the `a` tags (30617:<owner>:<repo-id>). */
   get repoCoord(): string | undefined {
     return getOrComputeCachedValue(this.event, RepoCoordSymbol, () =>
       getTagValue(this.event, "a"),
+    );
+  }
+
+  /**
+   * All repository coordinates from `a` tags. Multi-maintainer repos are
+   * announced under one coordinate per maintainer, and CI events may tag
+   * all of them.
+   */
+  get repoCoords(): string[] {
+    return getOrComputeCachedValue(this.event, RepoCoordsSymbol, () =>
+      this.event.tags.filter(([t, v]) => t === "a" && !!v).map(([, v]) => v),
     );
   }
 
