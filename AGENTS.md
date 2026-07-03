@@ -12,9 +12,11 @@ This is **gitworkshop** — a Nostr-native Git collaboration client (issues, PRs
 - **RxJS**: state and reactive data flow via observables (load the `react-rxjs-observables` skill)
 - **React Router**: client-side routing with `BrowserRouter` and automatic scroll-to-top
 - **TypeScript**: type-safe JS. **Never use `any`.**
-- **pnpm**: preferred package manager. npm is also supported for environments
-  where pnpm is unavailable; keep both `pnpm-lock.yaml` and `package-lock.json`
-  in sync when dependencies change. Never use `yarn`.
+- **pnpm**: preferred package manager. Nix and pnpm are not required for
+  day-to-day development; npm is supported for installs and scripts when pnpm is
+  unavailable. Dependency changes must be made with pnpm so `pnpm-lock.yaml`
+  stays authoritative, then `package-lock.json` must be refreshed for npm users.
+  Never use `yarn`.
 
 ## Applesauce MCP — your primary reference
 
@@ -54,7 +56,7 @@ shadcn/ui primitives live in `@/components/ui`. List the directory (`ls src/comp
 
 ## Dependency Policy
 
-- **Use `pnpm` when available and working.** npm is supported as a fallback (`npm ci`, `npm run dev`, `npm run pre-commit`). Keep `package-lock.json` tracked for npm fresh clones.
+- **Use `pnpm` when available and working.** npm is supported as a fallback (`npm ci`, `npm run dev`, `npm run pre-commit`). Nix is optional; `nix develop` only provides a pinned Node/pnpm/e2e-test toolchain. For dependency updates, use pnpm first so `pnpm-lock.yaml` remains the source of truth, then refresh and commit `package-lock.json` for npm fresh clones (for example, `npm install --package-lock-only`).
 - **Prefer patching upstream over working around bugs.** When a dependency has a bug or missing feature, use the package manager's patch workflow and commit the resulting patch files/configuration rather than wrapping or duplicating logic in our codebase.
 
 ## Pre-commit and Test Scripts

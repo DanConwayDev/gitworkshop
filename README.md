@@ -18,9 +18,11 @@ The built-in git explorer fetches only what it needs — commit graphs, trees, a
 
 ## Dev
 
-Use Node 24.x, matching CI.
+Use Node 24.x, matching CI. Neither Nix nor pnpm is required for day-to-day
+development; they are conveniences for reproducible environments and faster
+installs.
 
-pnpm is the preferred package manager:
+pnpm is the preferred package manager when available:
 
 ```sh
 pnpm install
@@ -32,6 +34,22 @@ If pnpm is not available, npm is also supported:
 ```sh
 npm ci
 npm run dev
+```
+
+Nix users can enter the dev shell first to get the pinned Node/pnpm toolchain:
+
+```sh
+nix develop
+pnpm install
+pnpm dev
+```
+
+When changing dependencies, use pnpm so `pnpm-lock.yaml` stays authoritative,
+then refresh the npm lockfile for npm users:
+
+```sh
+pnpm add <package>
+npm install --package-lock-only
 ```
 
 ## Contributing
