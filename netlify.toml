@@ -7,6 +7,33 @@
     from = "/*"
     to = "/index.html"
     status = 200
+    [redirects.headers]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+    for = "/"
+    [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+    for = "/index.html"
+    [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+    for = "/404.html"
+    [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+    for = "/sw.js"
+    [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+    for = "/assets/*"
+    [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
 
 [[headers]]
     for = "/.well-known/nostr.json"

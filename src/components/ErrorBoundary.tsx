@@ -1,5 +1,31 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 
+const chunkReloadParam = "gitworkshop-reload";
+
+function isDynamicImportLoadError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+
+  return (
+    message.includes("error loading dynamically imported module") ||
+    message.includes("failed to fetch dynamically imported module") ||
+    message.includes("importing a module script failed") ||
+    message.includes("chunkloaderror") ||
+    message.includes("loading chunk")
+  );
+}
+
+function reloadOnceForFreshAssets(): boolean {
+  const url = new URL(window.location.href);
+
+  if (url.searchParams.get(chunkReloadParam) === __GIT_COMMIT__) {
+    return false;
+  }
+
+  url.searchParams.set(chunkReloadParam, __GIT_COMMIT__);
+  window.location.replace(url.toString());
+  return true;
+}
+
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
@@ -33,6 +59,10 @@ export class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Error caught by ErrorBoundary:", error, errorInfo);
+
+    if (isDynamicImportLoadError(error) && reloadOnceForFreshAssets()) {
+      return;
+    }
 
     this.setState({
       error,
