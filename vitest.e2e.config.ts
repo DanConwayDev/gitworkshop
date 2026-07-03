@@ -5,8 +5,9 @@ import { defineConfig } from "vitest/config";
  * Vitest config for end-to-end tests that require a real `ngit-grasp` server.
  *
  * These are intentionally separate from the default unit-test run:
- *   - `pnpm test` / `pnpm pre-commit` do NOT run these (they `exclude` e2e).
- *   - Run them explicitly with `pnpm test:e2e`.
+ *   - `pnpm test` / `npm test` and `pnpm pre-commit` / `npm run pre-commit`
+ *     do NOT run these (they `exclude` e2e).
+ *   - Run them explicitly with `pnpm test:e2e` or `npm run test:e2e`.
  *   - Each suite gates itself on `graspBinaryAvailable()` (skips cleanly when
  *     no ngit-grasp binary is present), so running this config on a machine
  *     without the binary is a no-op rather than a failure.

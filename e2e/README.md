@@ -9,9 +9,10 @@ integration bugs unit tests can't.
 
 They are **opt-in** and **excluded from the normal test run**:
 
-- `pnpm test` and `pnpm pre-commit` do **not** run them (the default Vitest
-  config only includes `src/**`).
-- Run them explicitly: `pnpm test:e2e` (config: `vitest.e2e.config.ts`).
+- `pnpm test` / `npm test` and `pnpm pre-commit` / `npm run pre-commit` do
+  **not** run them (the default Vitest config only includes `src/**`).
+- Run them explicitly: `pnpm test:e2e` or `npm run test:e2e` (config:
+  `vitest.e2e.config.ts`).
 - Each suite gates itself on `graspBinaryAvailable()` — with no `ngit-grasp`
   binary present, suites **skip cleanly** instead of failing, so running this
   config anywhere is safe.

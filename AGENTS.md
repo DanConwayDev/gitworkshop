@@ -54,12 +54,12 @@ shadcn/ui primitives live in `@/components/ui`. List the directory (`ls src/comp
 
 ## Dependency Policy
 
-- **Use `pnpm` when available.** npm is supported as a fallback (`npm ci`, `npm run dev`, `npm run pre-commit`). Keep `package-lock.json` tracked for npm fresh clones.
+- **Use `pnpm` when available and working.** npm is supported as a fallback (`npm ci`, `npm run dev`, `npm run pre-commit`). Keep `package-lock.json` tracked for npm fresh clones.
 - **Prefer patching upstream over working around bugs.** When a dependency has a bug or missing feature, use the package manager's patch workflow and commit the resulting patch files/configuration rather than wrapping or duplicating logic in our codebase.
 
 ## Pre-commit and Test Scripts
 
-The git pre-commit hook runs `pnpm pre-commit` (or `npm run pre-commit` when pnpm is unavailable), which runs `tsc --noEmit`, `eslint`, `prettier --write .` (auto-formats and re-stages), `vitest run`, and `vite build`. `pnpm test` / `npm test` is the same pipeline but with `prettier --check` (CI-style, no writes).
+The git pre-commit hook runs `pnpm pre-commit` (or `npm run pre-commit` when pnpm is unavailable or the local pnpm shim is broken), which runs `tsc --noEmit`, `eslint`, `prettier --write .` (auto-formats and re-stages), `vitest run`, and `vite build`. `pnpm test` / `npm test` is the same pipeline but with `prettier --check` (CI-style, no writes).
 
 **Don't run `pnpm test`, `npm test`, `tsc`, `eslint`, `prettier`, or `vitest` separately as part of finishing a task** — committing already validates everything. Stage your changes and commit; if pre-commit rejects the commit, fix **all reported warnings and errors** (not just hard errors — warnings that caused a non-zero exit must also be resolved), then `git commit --amend` to fold the fixes into the original commit.
 
@@ -67,7 +67,7 @@ If you don't have a git pre-commit hook installed (fresh clone), copy this into 
 
 ```sh
 #!/bin/sh
-if command -v pnpm >/dev/null 2>&1; then
+if command -v pnpm >/dev/null 2>&1 && pnpm --version >/dev/null 2>&1; then
   pnpm pre-commit
 else
   npm run pre-commit

@@ -18,6 +18,8 @@ The built-in git explorer fetches only what it needs — commit graphs, trees, a
 
 ## Dev
 
+Use Node 24.x, matching CI.
+
 pnpm is the preferred package manager:
 
 ```sh
