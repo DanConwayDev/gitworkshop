@@ -719,9 +719,19 @@ export function MergePanel({
     detectionScanLimit,
   ]);
 
+  const mergeabilityCheckWillStart =
+    supportsBrowserMerge &&
+    mergeStep === "idle" &&
+    mergeability.status === "idle" &&
+    !!gitPool &&
+    !!defaultBranchHead &&
+    (isPRType ? !!pr.tip.commitId : !!patchChain?.length);
+
   const displayedStatus: MergePanelStatus = detectedMergeCommit
     ? "detected-merged"
-    : mergeability.status;
+    : mergeabilityCheckWillStart
+      ? "loading"
+      : mergeability.status;
 
   const defaultBranchRef = `refs/heads/${defaultBranchName}`;
 
@@ -1256,7 +1266,7 @@ export function MergePanel({
 
               {/* Action buttons / recheck */}
               <div className="shrink-0 flex items-center gap-2">
-                {mergeability.status === "loading" && (
+                {displayedStatus === "loading" && (
                   <span className="text-xs text-muted-foreground">
                     Checking...
                   </span>
