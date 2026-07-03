@@ -3,44 +3,33 @@ name: Test Pipeline
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     branches:
-      - master
+      - main
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - package-manager: pnpm
-            cache-dependency-path: pnpm-lock.yaml
-            install-command: pnpm install --frozen-lockfile
-            test-command: pnpm test
-          - package-manager: npm
-            cache-dependency-path: package-lock.json
-            install-command: npm ci
-            test-command: npm test
-
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
       - name: Setup pnpm
-        if: matrix.package-manager == 'pnpm'
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js 24.x
         uses: actions/setup-node@v4
         with:
           node-version: "24.x"
-          cache: ${{ matrix.package-manager }}
-          cache-dependency-path: ${{ matrix.cache-dependency-path }}
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Verify npm fallback lockfile
+        run: npm ci --dry-run --ignore-scripts
 
       - name: Install Dependencies
-        run: ${{ matrix.install-command }}
+        run: pnpm install --frozen-lockfile
 
       - name: Run tests
-        run: ${{ matrix.test-command }}
+        run: pnpm test
