@@ -155,9 +155,7 @@ type MergeStep =
   | "failed";
 
 type MergePanelStatus =
-  | MergeabilityStatus
-  | PRMergeabilityStatus
-  | "detected-merged";
+  MergeabilityStatus | PRMergeabilityStatus | "detected-merged";
 
 interface DetectedMergeCommit {
   hash: string;
@@ -613,16 +611,70 @@ export function MergePanel({
     detectionStopCommitId,
   ]);
 
+  // Eagerly check mergeability — both strategies in parallel (patch-type only)
+  const patchMergeability = usePatchMergeability(
+    isPRType ? undefined : patchChain,
+    gitPool,
+    effectiveCloneUrls,
+    !isPRType,
+    guessedBaseCommitId,
+    defaultBranchHead,
+    maintainerCommitter,
+  );
+
+  // PR-type mergeability: fetch tip tree and pre-build merge commit
+  const coverNoteBody = pr.coverNote?.content || undefined;
+  const prBody = pr.body || undefined;
+  const prMergeability = usePRMergeability(
+    isPRType ? pr.tip.commitId : undefined,
+    defaultBranchHead,
+    maintainerCommitter,
+    pr.rootEvent.id,
+    pr.currentSubject || pr.originalSubject,
+    prNevent ?? "",
+    pr.pubkey,
+    rootAuthorName,
+    coverNoteBody,
+    prBody,
+    gitPool,
+    effectiveCloneUrls,
+    isPRType,
+    pr.tip.explicitMergeBase,
+  );
+
+  // Unified mergeability view for the render logic
+  const mergeability = isPRType
+    ? {
+        status: prMergeability.status as
+          MergeabilityStatus | PRMergeabilityStatus,
+        buildResult: null,
+        applyResult: null,
+        conflicts: prMergeability.conflicts,
+        errorMessage: prMergeability.errorMessage,
+        mergeStrategyError: null,
+        mergeBaseMismatch: prMergeability.mergeBaseMismatch,
+        recheck: prMergeability.recheck,
+      }
+    : {
+        ...patchMergeability,
+        status: patchMergeability.status as
+          MergeabilityStatus | PRMergeabilityStatus,
+        mergeBaseMismatch: null,
+      };
+
+  const shouldScanForMissingMergedStatus =
+    mergeStep === "idle" &&
+    (pr.status === "open" || pr.status === "draft") &&
+    (mergeability.status === "ready" ||
+      mergeability.status === "ready-apply-only" ||
+      mergeability.status === "conflicts" ||
+      (!supportsBrowserMerge && mergeability.status !== "loading"));
+
   useEffect(() => {
     setDetectedMergeCommit(null);
     setDetectedMergeScanResult(null);
 
-    if (
-      !gitPool ||
-      !defaultBranchHead ||
-      mergeStep !== "idle" ||
-      (pr.status !== "open" && pr.status !== "draft")
-    ) {
+    if (!gitPool || !defaultBranchHead || !shouldScanForMissingMergedStatus) {
       setDetectingMergeCommit(false);
       return;
     }
@@ -660,66 +712,12 @@ export function MergePanel({
     gitPool,
     defaultBranchHead,
     effectiveCloneUrls,
-    mergeStep,
+    shouldScanForMissingMergedStatus,
     pr.rootEvent.id,
-    pr.status,
     detectionTipCommitId,
     detectionStopCommitId,
     detectionScanLimit,
   ]);
-
-  // Eagerly check mergeability — both strategies in parallel (patch-type only)
-  const patchMergeability = usePatchMergeability(
-    isPRType ? undefined : patchChain,
-    gitPool,
-    effectiveCloneUrls,
-    !isPRType,
-    guessedBaseCommitId,
-    defaultBranchHead,
-    maintainerCommitter,
-  );
-
-  // PR-type mergeability: fetch tip tree and pre-build merge commit
-  const coverNoteBody = pr.coverNote?.content || undefined;
-  const prBody = pr.body || undefined;
-  const prMergeability = usePRMergeability(
-    isPRType ? pr.tip.commitId : undefined,
-    defaultBranchHead,
-    maintainerCommitter,
-    pr.rootEvent.id,
-    pr.currentSubject || pr.originalSubject,
-    prNevent ?? "",
-    pr.pubkey,
-    rootAuthorName,
-    coverNoteBody,
-    prBody,
-    gitPool,
-    effectiveCloneUrls,
-    isPRType,
-    pr.tip.explicitMergeBase,
-  );
-
-  // Unified mergeability view for the render logic
-  const mergeability = isPRType
-    ? {
-        status: prMergeability.status as
-          | MergeabilityStatus
-          | PRMergeabilityStatus,
-        buildResult: null,
-        applyResult: null,
-        conflicts: prMergeability.conflicts,
-        errorMessage: prMergeability.errorMessage,
-        mergeStrategyError: null,
-        mergeBaseMismatch: prMergeability.mergeBaseMismatch,
-        recheck: prMergeability.recheck,
-      }
-    : {
-        ...patchMergeability,
-        status: patchMergeability.status as
-          | MergeabilityStatus
-          | PRMergeabilityStatus,
-        mergeBaseMismatch: null,
-      };
 
   const displayedStatus: MergePanelStatus = detectedMergeCommit
     ? "detected-merged"

@@ -18,8 +18,18 @@ The built-in git explorer fetches only what it needs — commit graphs, trees, a
 
 ## Dev
 
+pnpm is the preferred package manager:
+
 ```sh
+pnpm install
 pnpm dev
+```
+
+If pnpm is not available, npm is also supported:
+
+```sh
+npm ci
+npm run dev
 ```
 
 ## Contributing

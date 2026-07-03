@@ -15,6 +15,7 @@ dist-ssr
 .ai/
 yarn.lock
 package-lock.json
+!/package-lock.json
 
 # Editor directories and files
 .idea

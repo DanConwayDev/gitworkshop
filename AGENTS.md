@@ -12,7 +12,9 @@ This is **gitworkshop** — a Nostr-native Git collaboration client (issues, PRs
 - **RxJS**: state and reactive data flow via observables (load the `react-rxjs-observables` skill)
 - **React Router**: client-side routing with `BrowserRouter` and automatic scroll-to-top
 - **TypeScript**: type-safe JS. **Never use `any`.**
-- **pnpm**: package manager. Use `pnpm` exclusively, never `npm` or `yarn`.
+- **pnpm**: preferred package manager. npm is also supported for environments
+  where pnpm is unavailable; keep both `pnpm-lock.yaml` and `package-lock.json`
+  in sync when dependencies change. Never use `yarn`.
 
 ## Applesauce MCP — your primary reference
 
@@ -38,7 +40,6 @@ This file deliberately avoids enumerating models, casts, actions, hooks, and loa
 - `/src/pages/` — page components used by React Router.
 - `/src/types/` — TypeScript type definitions.
 - `/src/test/` — testing utilities including `TestApp`.
-- `/patches/` — pnpm dependency patches (see "Dependency Policy").
 - `/docs/` — long-form architecture documents (e.g. `matainership.md` covers the multi-maintainer repo model).
 - `App.tsx` — **already configured** with `EventStoreProvider`, `AccountsProvider`, `UnheadProvider`, `AppProvider`. **Read before editing**; changes are rarely needed.
 - `AppRouter.tsx` — React Router configuration.
@@ -53,29 +54,32 @@ shadcn/ui primitives live in `@/components/ui`. List the directory (`ls src/comp
 
 ## Dependency Policy
 
-- **Use `pnpm`.** All scripts assume it (`pnpm test`, `pnpm dev`, `pnpm format`, `pnpm pre-commit`).
-- **Prefer patching upstream over working around bugs.** When a dependency has a bug or missing feature, use [`pnpm patch`](https://pnpm.io/cli/patch) and commit the patch to `/patches/` rather than wrapping or duplicating logic in our codebase. `pnpm-workspace.yaml` already wires up `patchedDependencies` (see existing `applesauce-core@6.0.0.patch`, `applesauce-relay@6.0.0.patch`, `@jsr__fiatjaf__git-natural-api.patch`).
-- This keeps our code aligned with upstream and makes the fix trivial to upstream later.
+- **Use `pnpm` when available.** npm is supported as a fallback (`npm ci`, `npm run dev`, `npm run pre-commit`). Keep `package-lock.json` tracked for npm fresh clones.
+- **Prefer patching upstream over working around bugs.** When a dependency has a bug or missing feature, use the package manager's patch workflow and commit the resulting patch files/configuration rather than wrapping or duplicating logic in our codebase.
 
 ## Pre-commit and Test Scripts
 
-The git pre-commit hook runs `pnpm pre-commit`, which runs `tsc --noEmit`, `eslint`, `prettier --write .` (auto-formats and re-stages), `vitest run`, and `vite build`. `pnpm test` is the same pipeline but with `prettier --check` (CI-style, no writes).
+The git pre-commit hook runs `pnpm pre-commit` (or `npm run pre-commit` when pnpm is unavailable), which runs `tsc --noEmit`, `eslint`, `prettier --write .` (auto-formats and re-stages), `vitest run`, and `vite build`. `pnpm test` / `npm test` is the same pipeline but with `prettier --check` (CI-style, no writes).
 
-**Don't run `pnpm test`, `tsc`, `eslint`, `prettier`, or `vitest` separately as part of finishing a task** — committing already validates everything. Stage your changes and commit; if pre-commit rejects the commit, fix **all reported warnings and errors** (not just hard errors — warnings that caused a non-zero exit must also be resolved), then `git commit --amend` to fold the fixes into the original commit.
+**Don't run `pnpm test`, `npm test`, `tsc`, `eslint`, `prettier`, or `vitest` separately as part of finishing a task** — committing already validates everything. Stage your changes and commit; if pre-commit rejects the commit, fix **all reported warnings and errors** (not just hard errors — warnings that caused a non-zero exit must also be resolved), then `git commit --amend` to fold the fixes into the original commit.
 
 If you don't have a git pre-commit hook installed (fresh clone), copy this into `.git/hooks/pre-commit` and `chmod +x` it:
 
 ```sh
 #!/bin/sh
-pnpm pre-commit
+if command -v pnpm >/dev/null 2>&1; then
+  pnpm pre-commit
+else
+  npm run pre-commit
+fi
 ```
 
 ### End-to-end tests (`e2e/`) — opt-in, not part of pre-commit
 
-`e2e/` holds integration tests that drive the app's real git + Nostr libraries against a live [`ngit-grasp`][grasp] server (push, packed refs, GRASP purgatory/state). They are **deliberately excluded** from `pnpm test` / `pnpm pre-commit` and run only via `pnpm test:e2e` (`vitest.e2e.config.ts`).
+`e2e/` holds integration tests that drive the app's real git + Nostr libraries against a live [`ngit-grasp`][grasp] server (push, packed refs, GRASP purgatory/state). They are **deliberately excluded** from `pnpm test` / `npm test` / pre-commit and run only via `pnpm test:e2e` or `npm run test:e2e` (`vitest.e2e.config.ts`).
 
 - They run headless in the Node environment, but **require the `ngit-grasp` binary and a Node runtime** — they **cannot** run in a browser-only environment or anywhere the binary is unavailable. The Nix devShell provides a pinned binary (`nix develop`, sets `$NGIT_GRASP_BIN`); without a binary every suite **skips cleanly** rather than failing.
-- **Run them (if your environment can) whenever you change git/relay integration code — especially `src/lib/git-grasp-pool/`, `src/lib/git-*`, `src/lib/perform-merge.ts`, or the merge flow** — since those paths are not covered by the default unit run. `pnpm pre-commit` won't catch regressions there.
+- **Run them (if your environment can) whenever you change git/relay integration code — especially `src/lib/git-grasp-pool/`, `src/lib/git-*`, `src/lib/perform-merge.ts`, or the merge flow** — since those paths are not covered by the default unit run. Pre-commit won't catch regressions there.
 - See `e2e/README.md` for the harness, invariants (never import `src/services/nostr.ts` singletons), and the degrade-don't-stub rule for browser-only globals in Node.
 
 [grasp]: https://github.com/ — see `../ngit-grasp`
@@ -183,7 +187,7 @@ The active account is exposed via `useAccount()` (returns `{ pubkey, signer } | 
 - **Read APIs on the pool** (all cache-first, all accept an optional `fallbackUrls` for one-off URLs like a PR author's fork): `getSingleCommit`, `getCommitHistory`, `getTree`, `getFullTree`, `getBlob`, `getObjectByPath`, `findMergeBase`, `countCommitsBehind`, `findCommitBeforeTimestamp`. For diffs, fetch two `getFullTree` results, walk them with `diffTrees`, fetch only the changed blobs, then `generateUnifiedDiff` (all exported from the barrel).
 - **State event integration is automatic** when you pass `knownHeadCommit` / `stateRefs` / `stateCreatedAt` — the pool computes `state-behind-git` / `state-commit-unavailable` warnings, per-URL `UrlRefStatus`, and `crossRefDiscrepancies` for the multi-server status UI; it also schedules backoff re-fetches when the signed Nostr state is ahead of every git server.
 - **Don't:** import from `@fiatjaf/git-natural-api` outside `git-grasp-pool/git-http.ts`, construct `GitGraspPool` yourself, add a parallel cache, or fan out `Promise.any(cloneUrls.map(fetch...))` in a hook. The deep details (cache layout, packfile parsing, error classification, eviction) live in the source — read `src/lib/git-grasp-pool/` when you need them.
-- **Testing:** this code is **not** exercised by the default unit run. If your environment can (Node + the `ngit-grasp` binary), run `pnpm test:e2e` after changing anything here — see the "End-to-end tests" section above.
+- **Testing:** this code is **not** exercised by the default unit run. If your environment can (Node + the `ngit-grasp` binary), run `pnpm test:e2e` or `npm run test:e2e` after changing anything here — see the "End-to-end tests" section above.
 
 ## Routing
 
@@ -267,7 +271,7 @@ format(new Date(event.created_at * 1000), "MMM d, yyyy 'at' h:mm a");
 
 Never write tests because tool results show failures, because you think tests would be helpful, or because you added a feature.
 
-**Running validation — let pre-commit do it.** The git pre-commit hook runs the full `pnpm pre-commit` script (tsc, eslint, prettier --write, vitest, build). Don't run those tools manually as part of "validating" your changes — commit and react to anything pre-commit rejects.
+**Running validation — let pre-commit do it.** The git pre-commit hook runs the full pre-commit script (tsc, eslint, prettier --write, vitest, build). Don't run those tools manually as part of "validating" your changes — commit and react to anything pre-commit rejects.
 
 ### Test Setup
 
