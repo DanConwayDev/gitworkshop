@@ -723,8 +723,6 @@ export function MergePanel({
     supportsBrowserMerge &&
     mergeStep === "idle" &&
     mergeability.status === "idle" &&
-    !!gitPool &&
-    !!defaultBranchHead &&
     (isPRType ? !!pr.tip.commitId : !!patchChain?.length);
 
   const displayedStatus: MergePanelStatus = detectedMergeCommit
