@@ -141,8 +141,7 @@ export interface ResilientSubscriptionOptions {
    * Default: exponential backoff capped at 5 minutes (1s, 2s, 4s, 8s … 300s).
    */
   retryDelay?:
-    | number
-    | ((error: unknown, retryCount: number) => ReturnType<typeof timer>);
+    number | ((error: unknown, retryCount: number) => ReturnType<typeof timer>);
   /**
    * Called when a relay settles (EOSE received, or rate-limit cooldown active
    * on first connect, or no pagination needed). Useful when the caller manages

@@ -80,11 +80,7 @@ function urlsMatch(a: string, b: string): boolean {
 // ---------------------------------------------------------------------------
 
 export type RelayStatus =
-  | "pending"
-  | "success"
-  | "failed"
-  | "retrying"
-  | "permanent";
+  "pending" | "success" | "failed" | "retrying" | "permanent";
 
 /** A single publish attempt recorded for a relay. */
 export interface RelayAttempt {

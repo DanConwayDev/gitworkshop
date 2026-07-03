@@ -39,10 +39,8 @@ export class RepositoryState extends EventCast<RepositoryStateEvent> {
 
   /** The d-tag — matches the corresponding repository announcement's d-tag */
   get dTag(): string {
-    return getOrComputeCachedValue(
-      this.event,
-      DTagSymbol,
-      () => getTagValue(this.event, "d")!,
+    return getOrComputeCachedValue(this.event, DTagSymbol, () =>
+      getTagValue(this.event, "d")!,
     );
   }
 

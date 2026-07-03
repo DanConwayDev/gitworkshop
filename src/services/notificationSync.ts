@@ -164,8 +164,7 @@ export async function getOrCreateNotificationSigner(
     "#d": [NOTIFICATION_NSEC_D_TAG],
   } as Filter;
   const currentEnvelope = eventStore.getByFilters(nsecFilter)[0] as
-    | NostrEvent
-    | undefined;
+    NostrEvent | undefined;
 
   // 2. localStorage cache — valid only if the current envelope in the store
   //    matches our cached one per NIP-01 ordering: a different envelope wins

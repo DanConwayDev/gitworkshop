@@ -18,12 +18,7 @@
 import { cn } from "@/lib/utils";
 
 type ServerState =
-  | "success"
-  | "warning"
-  | "error"
-  | "loading"
-  | "connected"
-  | undefined;
+  "success" | "warning" | "error" | "loading" | "connected" | undefined;
 
 function mapStatus(
   status: string | undefined,
