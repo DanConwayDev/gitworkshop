@@ -112,4 +112,10 @@ Each suite owns its own grasp subprocess on its own port; files run
 sequentially (`fileParallelism: false`) to keep resource use predictable and
 logs readable.
 
+For multi-server merge scenarios, prefer the shared harness helpers:
+`seedMultiServerRepo`, `advanceBranch`, `seedTag`, and `seedKindPR` build the
+lagging-mirror/fork fixtures without duplicating wire-up. Merge-scenario tests
+must route `pushObjects` through `makePoolTransports` so `pool.pushRefUpdate`
+and the production `grasp-push.ts` fan-out logic are exercised.
+
 [grasp]: https://github.com/ — see `../ngit-grasp`

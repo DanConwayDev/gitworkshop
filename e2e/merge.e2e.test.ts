@@ -23,9 +23,10 @@
  *
  * `performMerge` is the plain-module extraction of `MergePanel.handleMerge`
  * (see `src/lib/git-grasp-pool/merge.ts`); the React component now calls the
- * same function, so this test covers the production path. Transport is
- * injected so we publish ONLY to the local grasp relay (via `RelayClient`)
- * and push ONLY to the local grasp git server — never `@/services/nostr`.
+ * same function, so this test covers the production path. Test transport wiring
+ * mirrors MergePanel: state/status publish ONLY to the local grasp relay (via
+ * `RelayClient`) and `pushObjects` goes through `pool.pushRefUpdate` so the
+ * production grasp fan-out path is exercised — never `@/services/nostr`.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -38,6 +39,7 @@ import {
   seedRepo,
   seedPatchPR,
   seedKindPR,
+  makePoolTransports,
   graspBinaryAvailable,
   REPO_STATE_KIND,
   type SeededRepo,
@@ -55,14 +57,7 @@ import {
   performPRMerge,
 } from "@/lib/git-grasp-pool";
 import { GitGraspPool } from "@/lib/git-grasp-pool";
-import { createPackfile } from "@/lib/git-packfile";
-import {
-  pushToGitServer,
-  getReceivePackRefs,
-  ZERO_HASH,
-  type RefUpdate,
-} from "@/lib/git-push";
-import type { PackableObject } from "@/lib/git-packfile";
+import { getReceivePackRefs, ZERO_HASH } from "@/lib/git-push";
 import type { CommitPerson } from "@/lib/git-objects";
 import { PR_KIND, STATUS_RESOLVED } from "@/lib/nip34";
 
@@ -153,7 +148,12 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       timezone: "+0000",
     };
 
-    const collectedEvents: NostrEvent[] = [];
+    const transports = makePoolTransports(
+      pool,
+      [relay],
+      [repo.cloneUrl],
+      repo.state,
+    );
 
     const result = await performMerge({
       signer: maintainer,
@@ -164,6 +164,7 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       dTag: repo.identifier,
       defaultBranchName: repo.branch,
       defaultBranchHead: repo.headCommit,
+      currentStateEvent: repo.state,
       repoCoords: [repo.coordinate],
       rootEventId: seeded.patch.id,
       rootAuthorPubkey: contributor.pubkey,
@@ -171,36 +172,9 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       prNevent: "nevent1test",
       committer,
       patchEventIds: [{ id: seeded.patch.id, pubkey: contributor.pubkey }],
-      // Publish state to the grasp relay ONLY (purgatory authorization).
-      publishStateToGrasp: async (state) => {
-        await relay.publish(state);
-      },
-      // Push the packfile to the grasp git server.
-      pushObjects: async (objects: PackableObject[], refUpdate: RefUpdate) => {
-        const packfile = await createPackfile(objects);
-        const pushResult = await pushToGitServer(
-          repo.cloneUrl,
-          [refUpdate],
-          packfile,
-        );
-        if (!pushResult.unpackOk || !pushResult.refResults.every((r) => r.ok)) {
-          throw new Error(
-            `push failed (unpackOk=${pushResult.unpackOk}): ` +
-              pushResult.refResults
-                .map((r) => `${r.refName}=${r.ok ? "ok" : r.reason}`)
-                .join(", "),
-          );
-        }
-      },
-      // "Broadcast" steps go to the same single relay in the test.
-      publishStatusBroadly: async (status) => {
-        await relay.publish(status);
-      },
-      broadcastStateBroadly: async () => {
-        // already published to the only relay we have; no-op
-      },
-      onEvent: (e) => collectedEvents.push(e),
+      ...transports.transports,
     });
+    expect(transports.getPushSummary()?.successCount).toBe(1);
 
     // ── 4. Assert: merge commit is the new tip on the git server ─────────
     const refs = await getReceivePackRefs(repo.cloneUrl);
@@ -247,7 +221,7 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
     expect(mergeCommitTag?.[1]).toBe(result.mergeCommit.hash);
 
     // onEvent fired for state + status.
-    expect(collectedEvents.map((e) => e.id)).toEqual(
+    expect(transports.events.map((e) => e.id)).toEqual(
       expect.arrayContaining([result.state.id, result.status.id]),
     );
 
@@ -332,7 +306,12 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
         },
       );
 
-      const collectedEvents: NostrEvent[] = [];
+      const transports = makePoolTransports(
+        prPool,
+        [relay],
+        [prRepo.cloneUrl],
+        seeded.state,
+      );
 
       // ── 3. Run the production PR merge orchestration ────────────────────
       const result = await performPRMerge({
@@ -356,39 +335,9 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
             new AbortController().signal,
             prCast.cloneUrls,
           ),
-        publishStateToGrasp: async (state) => {
-          await relay.publish(state);
-        },
-        pushObjects: async (
-          objects: PackableObject[],
-          refUpdate: RefUpdate,
-        ) => {
-          const packfile = await createPackfile(objects);
-          const pushResult = await pushToGitServer(
-            prRepo.cloneUrl,
-            [refUpdate],
-            packfile,
-          );
-          if (
-            !pushResult.unpackOk ||
-            !pushResult.refResults.every((r) => r.ok)
-          ) {
-            throw new Error(
-              `push failed (unpackOk=${pushResult.unpackOk}): ` +
-                pushResult.refResults
-                  .map((r) => `${r.refName}=${r.ok ? "ok" : r.reason}`)
-                  .join(", "),
-            );
-          }
-        },
-        publishStatusBroadly: async (status) => {
-          await relay.publish(status);
-        },
-        broadcastStateBroadly: async () => {
-          // already published to the only relay we have; no-op
-        },
-        onEvent: (e) => collectedEvents.push(e),
+        ...transports.transports,
       });
+      expect(transports.getPushSummary()?.successCount).toBe(1);
 
       // ── 4. Assert: merge commit is the new default branch tip ────────────
       const refs = await getReceivePackRefs(prRepo.cloneUrl);
@@ -432,7 +381,7 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       );
       expect(mergeCommitTag?.[1]).toBe(result.mergeCommit.hash);
 
-      expect(collectedEvents.map((e) => e.id)).toEqual(
+      expect(transports.events.map((e) => e.id)).toEqual(
         expect.arrayContaining([result.state.id, result.status.id]),
       );
       expect(result.pushedObjects.map((o) => o.hash)).toContain(seeded.commit);

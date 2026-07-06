@@ -96,6 +96,7 @@ async function performPatchMergeOnMirrors(params: {
   pool: GitGraspPool;
   currentStateEvent: NostrEvent;
   targetCloneUrls?: string[];
+  relays?: RelayClient[];
 }) {
   const { repo, fixture, pool, currentStateEvent } = params;
   const seeded = await seedPatchPR(repo, fixture.relayA, fixture.contributor, {
@@ -118,7 +119,7 @@ async function performPatchMergeOnMirrors(params: {
 
   const transports = makePoolTransports(
     pool,
-    [fixture.relayA, fixture.relayB],
+    params.relays ?? [fixture.relayA, fixture.relayB],
     params.targetCloneUrls ?? repo.cloneUrls,
     currentStateEvent,
   );
@@ -476,5 +477,37 @@ describeIfGrasp("e2e — lagging Grasp mirror merge fan-out", () => {
         result.state.id,
       ),
     ).resolves.toBeDefined();
+  }, 90_000);
+
+  it("reports B's authorisation rejection verbatim when the merged state never reaches B's relay", async () => {
+    fixture = await createFixture();
+    const repo = await seedMultiServerRepo(
+      [fixture.serverA, fixture.serverB],
+      [fixture.relayA, fixture.relayB],
+      fixture.maintainer,
+      { identifier: "missing-purgatory-on-b" },
+    );
+    pool = new GitGraspPool({ cloneUrls: repo.cloneUrls, corsProxyBase: null });
+
+    const { result, pushSummary } = await performPatchMergeOnMirrors({
+      repo,
+      fixture,
+      pool,
+      currentStateEvent: repo.state,
+      relays: [fixture.relayA],
+    });
+
+    expect(pushSummary?.successCount).toBe(1);
+    expect(pushSummary?.totalCount).toBe(2);
+    const bOutcome = pushSummary?.outcomes.find(
+      (outcome) => outcome.cloneUrl === repo.servers[1].cloneUrl,
+    );
+    expect(bOutcome?.ok).toBe(false);
+    expect(bOutcome?.message).toMatch(/server rejected push:.*authoris/i);
+    await expectBranch(
+      repo.servers[0].cloneUrl,
+      repo.branch,
+      result.mergeCommit.hash,
+    );
   }, 90_000);
 });
