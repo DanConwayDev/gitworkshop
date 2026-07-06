@@ -101,7 +101,7 @@ import {
 import type { CommitPerson } from "@/lib/git-objects";
 import type { Patch } from "@/casts/Patch";
 import type { Commit, GitGraspPool } from "@/lib/git-grasp-pool";
-import type { ResolvedRepo, ResolvedPR } from "@/lib/nip34";
+import { getStateRefs, type ResolvedRepo, type ResolvedPR } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -185,6 +185,11 @@ interface PushDeliverySummary {
   outcomes: PushDeliveryOutcome[];
   successCount: number;
   totalCount: number;
+}
+
+interface DesiredStateRef {
+  refName: string;
+  commitHash: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -435,31 +440,66 @@ function summarizeRawPushResponse(raw: string): string {
   return cleaned.length > 160 ? `${cleaned.slice(0, 160)}…` : cleaned;
 }
 
-/**
- * Read the server's currently advertised value for a ref via the
- * receive-pack advertisement.
- *
- * Returns the commit hash, `undefined` when the server does not have the ref,
- * or `null` when the advertisement could not be read at all.
- */
-async function getAdvertisedRef(
+async function getAdvertisedRefs(
   cloneUrl: string,
-  refName: string,
-): Promise<string | undefined | null> {
+): Promise<Record<string, string> | null> {
   try {
-    const refs = await getReceivePackRefs(cloneUrl);
-    return refs.refs[refName];
+    return (await getReceivePackRefs(cloneUrl)).refs;
   } catch {
     return null;
   }
 }
 
-async function serverRefMatches(
+function getComparableAdvertisedRef(
+  refs: Record<string, string>,
+  refName: string,
+): string | undefined {
+  return refs[`${refName}^{}`] ?? refs[refName];
+}
+
+function advertisedRefsContainHash(
+  refs: Record<string, string>,
+  hash: string,
+): boolean {
+  return Object.values(refs).includes(hash);
+}
+
+function refsMatch(
+  refs: Record<string, string>,
+  refName: string,
+  expectedHash: string,
+): boolean {
+  return getComparableAdvertisedRef(refs, refName) === expectedHash;
+}
+
+function getPostPushStateRefs(
+  stateEvent: NostrEvent | null | undefined,
+  primaryUpdate: RefUpdate,
+): DesiredStateRef[] {
+  const refs = new Map<string, string>();
+
+  if (stateEvent) {
+    for (const ref of getStateRefs(stateEvent)) {
+      refs.set(ref.name, ref.commitId);
+    }
+  }
+
+  refs.set(primaryUpdate.refName, primaryUpdate.newHash);
+
+  return [...refs]
+    .filter(([, commitHash]) => commitHash !== ZERO_HASH)
+    .map(([refName, commitHash]) => ({ refName, commitHash }));
+}
+
+async function serverRefsMatch(
   cloneUrl: string,
-  refUpdate: RefUpdate,
+  desiredRefs: DesiredStateRef[],
 ): Promise<boolean> {
-  return (
-    (await getAdvertisedRef(cloneUrl, refUpdate.refName)) === refUpdate.newHash
+  const advertisedRefs = await getAdvertisedRefs(cloneUrl);
+  if (!advertisedRefs) return false;
+
+  return desiredRefs.every(({ refName, commitHash }) =>
+    refsMatch(advertisedRefs, refName, commitHash),
   );
 }
 
@@ -467,13 +507,15 @@ async function serverRefMatches(
  * Shared context for pushing one ref update to every Grasp server.
  *
  * `baseObjects` / `sharedPackfile` cover the expected case (server ref at the
- * consensus old hash). `fetchCatchUpObjects` fetches the extra objects a
- * lagging server needs: everything from its actual head up to the consensus
- * old hash.
+ * consensus old hash). `desiredRefs` is the complete post-push state-event ref
+ * set. `fetchCatchUpObjects` fetches the extra objects a lagging server needs:
+ * everything from its actual head up to the consensus old hash, plus missing
+ * state-event refs such as tags or non-default branches.
  */
 interface GraspPushContext {
   baseObjects: PackableObject[];
   sharedPackfile: Uint8Array;
+  desiredRefs: DesiredStateRef[];
   fetchCatchUpObjects: (
     tipCommitId: string,
     stopAtCommitId: string,
@@ -488,17 +530,36 @@ async function pushToGraspServer(
   // Read the server's actual advertised ref. Grasp servers can lag behind the
   // signed Nostr state (missed earlier pushes), so the consensus old hash is
   // not necessarily what this server has.
-  const serverHead = await getAdvertisedRef(cloneUrl, refUpdate.refName);
+  const advertisedRefs = await getAdvertisedRefs(cloneUrl);
+  const serverHead = advertisedRefs
+    ? getComparableAdvertisedRef(advertisedRefs, refUpdate.refName)
+    : null;
 
-  if (serverHead === refUpdate.newHash) {
+  const missingStateRefUpdates: RefUpdate[] = advertisedRefs
+    ? ctx.desiredRefs
+        .filter(({ refName, commitHash }) =>
+          refName === refUpdate.refName
+            ? false
+            : !refsMatch(advertisedRefs, refName, commitHash),
+        )
+        .map(({ refName, commitHash }) => ({
+          oldHash: advertisedRefs[refName] ?? ZERO_HASH,
+          newHash: commitHash,
+          refName,
+        }))
+    : [];
+
+  if (serverHead === refUpdate.newHash && missingStateRefUpdates.length === 0) {
     return {
       cloneUrl,
       ok: true,
-      message: "already has the new commit",
+      message: "already matches the state event",
     };
   }
 
-  let effectiveUpdate = refUpdate;
+  const effectiveUpdates: RefUpdate[] = [];
+  let primaryCatchUpObjects: PackableObject[] = [];
+  const supplementalObjects: PackableObject[] = [];
   let packfile = ctx.sharedPackfile;
 
   try {
@@ -508,10 +569,8 @@ async function pushToGraspServer(
       // the base objects. If the repo is deeper than the bound, the server's
       // connectivity check fails and the outcome reports it.
       const catchUp = await ctx.fetchCatchUpObjects(refUpdate.oldHash, "");
-      effectiveUpdate = { ...refUpdate, oldHash: ZERO_HASH };
-      packfile = await createPackfile(
-        uniquePackableObjects([...ctx.baseObjects, ...(catchUp ?? [])]),
-      );
+      primaryCatchUpObjects = catchUp ?? [];
+      effectiveUpdates.push({ ...refUpdate, oldHash: ZERO_HASH });
     } else if (serverHead !== null && serverHead !== refUpdate.oldHash) {
       // The server's ref differs from the consensus old hash — it is behind
       // (or diverged). Fetch the objects between its head and the consensus
@@ -534,18 +593,70 @@ async function pushToGraspServer(
             "could not be fetched",
         };
       }
-      effectiveUpdate = { ...refUpdate, oldHash: serverHead };
-      packfile = await createPackfile(
-        uniquePackableObjects([...ctx.baseObjects, ...catchUp]),
-      );
+      primaryCatchUpObjects = catchUp;
+      effectiveUpdates.push({ ...refUpdate, oldHash: serverHead });
+    } else if (serverHead !== refUpdate.newHash) {
+      effectiveUpdates.push(refUpdate);
     }
     // serverHead === null (advertisement unreadable) or serverHead matches the
     // consensus old hash: push the shared pack with the consensus update.
 
-    const result = await pushToGitServer(cloneUrl, [effectiveUpdate], packfile);
+    if (advertisedRefs) {
+      for (const update of missingStateRefUpdates) {
+        const existingHash = getComparableAdvertisedRef(
+          advertisedRefs,
+          update.refName,
+        );
+
+        if (
+          !advertisedRefsContainHash(advertisedRefs, update.newHash) &&
+          !ctx.baseObjects.some((object) => object.hash === update.newHash) &&
+          !primaryCatchUpObjects.some(
+            (object) => object.hash === update.newHash,
+          )
+        ) {
+          const catchUp = await ctx.fetchCatchUpObjects(
+            update.newHash,
+            existingHash ?? "",
+          );
+
+          if (!catchUp) {
+            return {
+              cloneUrl,
+              ok: false,
+              message:
+                `server is missing ${update.refName} at ` +
+                `${update.newHash.slice(0, 8)} and objects could not be fetched`,
+            };
+          }
+
+          supplementalObjects.push(...catchUp);
+        }
+
+        effectiveUpdates.push(update);
+      }
+    }
+
+    const needsCustomPackfile =
+      primaryCatchUpObjects.length > 0 || supplementalObjects.length > 0;
+    if (needsCustomPackfile) {
+      packfile = await createPackfile(
+        uniquePackableObjects([
+          ...ctx.baseObjects,
+          ...primaryCatchUpObjects,
+          ...supplementalObjects,
+        ]),
+      );
+    }
+
+    const result = await pushToGitServer(cloneUrl, effectiveUpdates, packfile);
     const refFailures = result.refResults.filter((r) => !r.ok);
 
-    if (result.unpackOk && refFailures.length === 0) {
+    if (
+      result.unpackOk &&
+      refFailures.length === 0 &&
+      (await serverRefsMatch(cloneUrl, ctx.desiredRefs))
+    ) {
       return {
         cloneUrl,
         ok: true,
@@ -553,7 +664,7 @@ async function pushToGraspServer(
       };
     }
 
-    if (await serverRefMatches(cloneUrl, refUpdate)) {
+    if (await serverRefsMatch(cloneUrl, ctx.desiredRefs)) {
       return {
         cloneUrl,
         ok: true,
@@ -594,7 +705,7 @@ async function pushToGraspServer(
       message: failures || "ref update rejected",
     };
   } catch (err) {
-    if (await serverRefMatches(cloneUrl, refUpdate)) {
+    if (await serverRefsMatch(cloneUrl, ctx.desiredRefs)) {
       return {
         cloneUrl,
         ok: true,
@@ -984,6 +1095,7 @@ export function MergePanel({
       const ctx: GraspPushContext = {
         baseObjects,
         sharedPackfile: await createPackfile(baseObjects),
+        desiredRefs: getPostPushStateRefs(currentStateEvent, refUpdate),
         fetchCatchUpObjects: async (tipCommitId, stopAtCommitId) => {
           if (!gitPool || !tipCommitId || tipCommitId === ZERO_HASH) {
             return null;
@@ -1023,7 +1135,7 @@ export function MergePanel({
 
       return summary;
     },
-    [repo.graspCloneUrls, gitPool],
+    [repo.graspCloneUrls, gitPool, currentStateEvent],
   );
 
   // ── Merge orchestration (merge strategy) ─────────────────────────────────
