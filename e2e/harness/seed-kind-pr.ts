@@ -18,7 +18,7 @@ import { pushToGitServer, ZERO_HASH } from "@/lib/git-push";
 import type { CommitPerson, TreeEntry } from "@/lib/git-objects";
 import { PR_KIND } from "@/lib/nip34";
 import {
-  REPO_STATE_KIND,
+  buildStateWithRefs,
   waitUntilAfterUnixSecond,
   type SeededRepo,
 } from "./repo-fixture";
@@ -35,13 +35,33 @@ export interface SeedKindPROptions {
   cloneUrl?: string;
   /** Override where the branch objects are pushed. Default: repo.cloneUrl. */
   pushCloneUrl?: string;
+  /**
+   * Whether to publish a maintainer-signed repo state containing the PR branch.
+   * Default: true. Fork fixtures should set this to false because the branch
+   * exists only in the contributor's fork, not the maintainer repository state.
+   */
+  publishState?: boolean;
+  /** Relays to receive the maintainer state. Default: the `relay` argument. */
+  publishStateTo?: RelayClient[];
+  /** Signer for the branch state. Default: `maintainer`. */
+  stateSigner?: TestSigner;
 }
 
 export interface SeededKindPR {
   pr: NostrEvent;
   commit: string;
-  state: NostrEvent;
+  state: NostrEvent | null;
   branch: string;
+}
+
+function stateRefMap(state: NostrEvent): Map<string, string> {
+  const refs = new Map<string, string>();
+  for (const [name, commitHash] of state.tags) {
+    if (name?.startsWith("refs/") && !name.endsWith("^{}") && commitHash) {
+      refs.set(name, commitHash);
+    }
+  }
+  return refs;
 }
 
 export async function seedKindPR(
@@ -79,21 +99,21 @@ export async function seedKindPR(
   });
 
   const prBranchRef = `refs/heads/${options.branch}`;
-  const state = finalizeEvent(
-    {
-      kind: REPO_STATE_KIND,
-      created_at: Math.floor(Date.now() / 1000),
-      content: "",
-      tags: [
-        ["d", repo.identifier],
-        [`refs/heads/${repo.branch}`, repo.headCommit],
-        [prBranchRef, commit.hash],
-        ["HEAD", `ref: refs/heads/${repo.branch}`],
-      ],
-    },
-    maintainer.secretKey,
-  );
-  await relay.publish(state);
+  const refs = stateRefMap(repo.state);
+  refs.set(`refs/heads/${repo.branch}`, repo.headCommit);
+  refs.set(prBranchRef, commit.hash);
+  const state = buildStateWithRefs(options.stateSigner ?? maintainer, {
+    identifier: repo.identifier,
+    refs: [...refs].map(([name, commitHash]) => ({ name, commitHash })),
+    headBranch: repo.branch,
+  });
+
+  if (options.publishState !== false) {
+    const stateRelays = options.publishStateTo ?? [relay];
+    await Promise.all(
+      stateRelays.map((stateRelay) => stateRelay.publish(state)),
+    );
+  }
 
   const packfile = await createPackfile([blob, tree, commit]);
   const pushResult = await pushToGitServer(
@@ -119,7 +139,9 @@ export async function seedKindPR(
   // The merge will publish a replacement kind:30618. Tick past this state's
   // second so the merged state wins deterministically on relays with same-second
   // replaceable tie behaviour.
-  await waitUntilAfterUnixSecond(state.created_at);
+  if (options.publishState !== false) {
+    await waitUntilAfterUnixSecond(state.created_at);
+  }
 
   const pr = finalizeEvent(
     {
@@ -140,5 +162,10 @@ export async function seedKindPR(
   );
   await relay.publish(pr);
 
-  return { pr, commit: commit.hash, state, branch: options.branch };
+  return {
+    pr,
+    commit: commit.hash,
+    state: options.publishState === false ? null : state,
+    branch: options.branch,
+  };
 }

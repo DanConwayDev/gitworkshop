@@ -60,6 +60,12 @@ export interface SeedRepoOptions {
   files?: Record<string, string>;
   /** Commit message for the initial commit. Default: "initial commit". */
   message?: string;
+  /**
+   * Servers to receive the initial packfile. Default: all servers. Useful for
+   * fresh-mirror fixtures where the announcement/state should exist everywhere
+   * but one mirror starts with no branch.
+   */
+  pushInitialTo?: GraspServer[];
 }
 
 export interface SeededRepo {
@@ -460,21 +466,27 @@ export async function seedMultiServerRepo(
   // state. Tick past the seeded state's second before returning the fixture.
   await waitUntilAfterUnixSecond(state.created_at);
 
-  // --- 3. Push the packfile to every server ---
+  // --- 3. Push the packfile to selected servers ---
   const packfile = await createPackfile(objects);
   const refUpdate: RefUpdate = {
     oldHash: ZERO_HASH,
     newHash: commit.hash,
     refName: `refs/heads/${branch}`,
   };
+  const initialPushServers = options.pushInitialTo ?? grasps;
+  const initialPushCloneUrls = initialPushServers.map((grasp) =>
+    grasp.cloneUrl(npub, identifier),
+  );
   const pushResults = await Promise.all(
-    cloneUrls.map((url) => pushToGitServer(url, [refUpdate], packfile)),
+    initialPushCloneUrls.map((url) =>
+      pushToGitServer(url, [refUpdate], packfile),
+    ),
   );
 
   for (const [index, result] of pushResults.entries()) {
     if (!result.unpackOk || !result.refResults.every((r) => r.ok)) {
       throw new Error(
-        `seedMultiServerRepo: initial push to ${cloneUrls[index]} failed ` +
+        `seedMultiServerRepo: initial push to ${initialPushCloneUrls[index]} failed ` +
           `(unpackOk=${result.unpackOk}): ` +
           result.refResults
             .map((r) => `${r.refName}=${r.ok ? "ok" : r.reason}`)
