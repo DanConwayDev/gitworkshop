@@ -88,6 +88,7 @@ import {
   type RefUpdate,
 } from "@/lib/git-push";
 import { performMerge } from "@/lib/perform-merge";
+import { performPRMerge } from "@/lib/perform-pr-merge";
 import { assertFastForwardSafe } from "@/lib/patch-merge";
 import { pool as relayPool, eventStore } from "@/services/nostr";
 import { outboxStore } from "@/services/outbox";
@@ -1289,89 +1290,55 @@ export function MergePanel({
 
     try {
       const { mergeCommitObj } = prMergeability.result;
+      let pushSummary: PushDeliverySummary | null = null;
 
-      // ── Step 2+3: Publish state + push ────────────────────────────────
-      const signedState = await RepoStateFactory.updateBranch(
-        repo.dTag,
-        currentStateEvent,
-        mergeCommitObj.hash,
+      const { mergeCommit } = await performPRMerge({
+        signer: account.signer,
+        signerPubkey: account.pubkey,
+        mergeCommitObj,
+        prTipCommitHash: pr.tip.commitId,
+        mergeBase: prMergeability.result.mergeBase,
+        extraObjects: prMergeability.result.extraObjects,
+        dTag: repo.dTag,
         defaultBranchName,
-      ).sign(account.signer);
-
-      setMergeStep("publishing-state");
-      await publishToGraspRelays(signedState, graspRelayUrls);
-      eventStore.add(signedState);
-
-      setMergeStep("pushing");
-      const branchObjects = await gitPool.getPackableObjectsForCommitRange(
-        pr.tip.commitId,
-        prMergeability.result.mergeBase,
-        new AbortController().signal,
-        effectiveCloneUrls,
-      );
-
-      if (!branchObjects) {
-        throw new Error(
-          "Could not fetch the PR branch objects needed for the push. " +
-            "The PR author's clone URL may be unavailable.",
-        );
-      }
-
-      // Push the merge commit, any PR branch objects the target Grasp server
-      // lacks, and any new objects a three-way merge produced (rebuilt trees +
-      // auto-merged blobs). Forked PR commits are not guaranteed to exist on the
-      // target server before this push.
-      const pushSummary = await pushObjects(
-        [
-          mergeCommitObj,
-          ...branchObjects,
-          ...prMergeability.result.extraObjects,
-        ],
-        {
-          oldHash: defaultBranchHead,
-          newHash: mergeCommitObj.hash,
-          refName: defaultBranchRef,
+        defaultBranchHead,
+        currentStateEvent,
+        repoCoords: pr.repoCoords,
+        rootEventId: pr.rootEvent.id,
+        rootAuthorPubkey: pr.pubkey,
+        fetchBranchObjects: (tipCommitHash, stopAtCommitHash) =>
+          gitPool.getPackableObjectsForCommitRange(
+            tipCommitHash,
+            stopAtCommitHash,
+            new AbortController().signal,
+            effectiveCloneUrls,
+          ),
+        publishStateToGrasp: (state) =>
+          publishToGraspRelays(state, graspRelayUrls),
+        pushObjects: async (objects, refUpdate) => {
+          pushSummary = await pushObjects(objects, refUpdate);
+          setPushDelivery(pushSummary);
+          onSuccessfulPush?.();
         },
-      );
-      setPushDelivery(pushSummary);
-      onSuccessfulPush?.();
+        publishStatusBroadly: (status) =>
+          outboxStore.publish(status, [
+            `outbox:${account.pubkey}`,
+            ...repo.allCoordinates,
+            ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
+          ]),
+        broadcastStateBroadly: (state) =>
+          outboxStore.publish(state, [
+            `outbox:${account.pubkey}`,
+            ...repo.allCoordinates,
+            "fallback-relays",
+          ]),
+        onEvent: (event) => eventStore.add(event),
+        onStep: (step) => setMergeStep(step),
+      });
 
-      // ── Step 4+5: Status + broadcast ──────────────────────────────────
-      setMergeStep("publishing-status");
-
-      const statusKind = STATUS_KIND_MAP["resolved"];
-      const signedStatus = await StatusChangeFactory.create(
-        statusKind,
-        pr.rootEvent.id,
-        pr.repoCoords,
-        pr.pubkey,
-        account.pubkey,
-      )
-        .modifyPublicTags((tags) => [
-          ...tags,
-          ["merge-commit", mergeCommitObj.hash],
-          ["r", mergeCommitObj.hash],
-        ])
-        .sign(account.signer);
-
-      await outboxStore.publish(signedStatus, [
-        `outbox:${account.pubkey}`,
-        ...repo.allCoordinates,
-        ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
-      ]);
-      eventStore.add(signedStatus);
-
-      setMergeStep("broadcasting-state");
-      await outboxStore.publish(signedState, [
-        `outbox:${account.pubkey}`,
-        ...repo.allCoordinates,
-        "fallback-relays",
-      ]);
-
-      setMergeStep("done");
       toast({
         title: "PR merged",
-        description: `Merge commit ${mergeCommitObj.hash.slice(0, 8)} pushed to ${defaultBranchName}. ${summarizePushDelivery(pushSummary)}`,
+        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}. ${pushSummary ? summarizePushDelivery(pushSummary) : ""}`,
       });
     } catch (err) {
       const message =
@@ -1390,7 +1357,6 @@ export function MergePanel({
     defaultBranchHead,
     currentStateEvent,
     defaultBranchName,
-    defaultBranchRef,
     gitPool,
     effectiveCloneUrls,
     pr,
