@@ -205,16 +205,28 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
     expect(result.mergeCommit.hash).not.toBe(seeded.commit);
 
     // ── 5. Assert: the kind:30618 state on the relay points at the merge ──
-    const states = await relay.query([
-      {
-        kinds: [REPO_STATE_KIND],
-        authors: [maintainer.pubkey],
-        "#d": [repo.identifier],
-      },
-    ]);
-    const headRefTag = states
-      .flatMap((s) => s.tags)
-      .find(([t]) => t === `refs/heads/${repo.branch}`);
+    // The state event is accepted into purgatory first and only promoted to
+    // the queryable relay DB after the push materialises the refs — that
+    // promotion is asynchronous, so poll briefly instead of asserting on the
+    // first query. The relay may also still return the seed state alongside
+    // the merged state and makes no ordering guarantee, so assert against the
+    // exact state event performMerge published.
+    let mergedState: NostrEvent | undefined;
+    for (let attempt = 0; attempt < 20 && !mergedState; attempt++) {
+      const states = await relay.query([
+        {
+          kinds: [REPO_STATE_KIND],
+          authors: [maintainer.pubkey],
+          "#d": [repo.identifier],
+        },
+      ]);
+      mergedState = states.find((s) => s.id === result.state.id);
+      if (!mergedState) await new Promise((r) => setTimeout(r, 250));
+    }
+    expect(mergedState).toBeDefined();
+    const headRefTag = mergedState?.tags.find(
+      ([t]) => t === `refs/heads/${repo.branch}`,
+    );
     expect(headRefTag?.[1]).toBe(result.mergeCommit.hash);
 
     // ── 6. Assert: the kind:1631 merged status is queryable ──────────────

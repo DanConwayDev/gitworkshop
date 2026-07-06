@@ -215,7 +215,13 @@ export function useCreateRepo() {
 
           const pushResult = result.value;
           if (!pushResult.unpackOk) {
-            errors.push(`${url}: unpack failed`);
+            errors.push(
+              `${url}: ${
+                pushResult.serverError
+                  ? `server rejected push: ${pushResult.serverError}`
+                  : `unpack failed${pushResult.unpackStatus ? `: ${pushResult.unpackStatus}` : ""}`
+              }`,
+            );
             continue;
           }
 
@@ -329,7 +335,13 @@ export function useCreateRepo() {
             continue;
           }
           if (!pr.value.unpackOk) {
-            errors.push(`${url}: unpack failed`);
+            errors.push(
+              `${url}: ${
+                pr.value.serverError
+                  ? `server rejected push: ${pr.value.serverError}`
+                  : `unpack failed${pr.value.unpackStatus ? `: ${pr.value.unpackStatus}` : ""}`
+              }`,
+            );
             continue;
           }
           const failedRefs = pr.value.refResults.filter((r) => !r.ok);

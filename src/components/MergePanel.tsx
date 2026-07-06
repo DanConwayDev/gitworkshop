@@ -418,6 +418,21 @@ function uniquePackableObjects(objects: PackableObject[]): PackableObject[] {
 }
 
 /**
+ * Compact a raw receive-pack response body for inclusion in a user-facing
+ * error message. Strips control characters (pkt-line framing, side-band
+ * prefixes) and truncates — enough for a bug report to identify what the
+ * server actually said.
+ */
+function summarizeRawPushResponse(raw: string): string {
+  const cleaned = raw
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f]+/g, " ")
+    .trim();
+  if (cleaned.length === 0) return "empty response";
+  return cleaned.length > 160 ? `${cleaned.slice(0, 160)}…` : cleaned;
+}
+
+/**
  * Read the server's currently advertised value for a ref via the
  * receive-pack advertisement.
  *
@@ -543,11 +558,26 @@ async function pushToGraspServer(
       };
     }
 
+    // Application-level rejection (ERR pkt-line). Grasp servers reply this
+    // way when the push is refused before git-receive-pack runs — most
+    // importantly "authorisation failed: <reason>" when the signed state
+    // event is not in purgatory. Report the server's reason verbatim.
+    if (result.serverError) {
+      return {
+        cloneUrl,
+        ok: false,
+        message: `server rejected push: ${result.serverError}`,
+      };
+    }
+
     if (!result.unpackOk) {
       return {
         cloneUrl,
         ok: false,
-        message: "unpack failed",
+        message: result.unpackStatus
+          ? `unpack failed: ${result.unpackStatus}`
+          : "push failed: server returned no unpack status " +
+            `(${summarizeRawPushResponse(result.rawResponse)})`,
       };
     }
 
