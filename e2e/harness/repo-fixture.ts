@@ -93,6 +93,12 @@ const DEFAULT_FILES: Record<string, string> = {
   "README.md": "# test repo\n\nseeded by the e2e harness\n",
 };
 
+async function waitUntilAfterUnixSecond(timestamp: number): Promise<void> {
+  while (Math.floor(Date.now() / 1000) <= timestamp) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 /** Build a CommitPerson for `signer` at the given unix-second timestamp. */
 function commitPerson(signer: TestSigner, timestamp: number): CommitPerson {
   return {
@@ -229,6 +235,11 @@ export async function seedRepo(
     branch,
   });
   await relay.publish(state);
+  // NIP-34 state is addressable/replaceable (pubkey + kind + d). Grasp relays
+  // break same-second replacement ties by event id, so a fixture that publishes
+  // a follow-up state immediately after seeding can randomly lose the newer
+  // state. Tick past the seeded state's second before returning the fixture.
+  await waitUntilAfterUnixSecond(state.created_at);
 
   // --- 3. Push the packfile ---
   const packfile = await createPackfile(objects);
