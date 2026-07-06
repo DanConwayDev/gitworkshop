@@ -101,6 +101,39 @@ function ancestryDistances(
   return distances;
 }
 
+/**
+ * Estimate the `deepen` depth needed for a shallow fetch from `tipCommitId` to
+ * include every known commit in `tipCommitId..stopAtCommitId`.
+ *
+ * Walks the commit graph (via parent links) rather than relying on the
+ * timestamp-sorted order of `history` — rebased or cherry-picked commits with
+ * old committer dates, clock skew, and merge-heavy side branches all make a
+ * timestamp index under-count the true graph depth. `deepen N` includes
+ * commits whose minimum parent-distance from the tip is less than N, so the
+ * required depth is the maximum such distance plus one. Over-estimating is
+ * safe (the server ignores objects it already has); under-estimating produces
+ * an incomplete pack.
+ */
+function estimateDeepenDepth(
+  history: Commit[],
+  tipCommitId: string,
+  stopAtCommitId: string,
+): number {
+  const byHash = new Map(history.map((commit) => [commit.hash, commit]));
+  const distances = ancestryDistances(tipCommitId, byHash);
+
+  // The stop commit itself is excluded: the receiving side already has it.
+  // Unknown parent hashes (beyond the walked history) are kept — they add one
+  // level of safety margin when the history walk was truncated.
+  let maxDistance = 0;
+  for (const [hash, distance] of distances) {
+    if (hash === stopAtCommitId) continue;
+    maxDistance = Math.max(maxDistance, distance);
+  }
+
+  return Math.max(1, maxDistance + 1);
+}
+
 // ---------------------------------------------------------------------------
 // Ref status computation helpers
 // ---------------------------------------------------------------------------
@@ -1392,11 +1425,11 @@ export class GitGraspPool {
 
     if (!history || history.length === 0) return null;
 
-    const stopIndex = history.findIndex(
-      (commit) => commit.hash === stopAtCommitId,
+    const requestedDepth = estimateDeepenDepth(
+      history,
+      tipCommitId,
+      stopAtCommitId,
     );
-    const requestedDepth =
-      stopIndex === -1 ? history.length : Math.max(1, stopIndex);
 
     return this.withFallback(
       signal,

@@ -84,6 +84,7 @@ import { createPackfile, type PackableObject } from "@/lib/git-packfile";
 import {
   getReceivePackRefs,
   pushToGitServer,
+  ZERO_HASH,
   type RefUpdate,
 } from "@/lib/git-push";
 import { performMerge } from "@/lib/perform-merge";
@@ -416,24 +417,62 @@ function uniquePackableObjects(objects: PackableObject[]): PackableObject[] {
   return [...byHash.values()];
 }
 
+/**
+ * Read the server's currently advertised value for a ref via the
+ * receive-pack advertisement.
+ *
+ * Returns the commit hash, `undefined` when the server does not have the ref,
+ * or `null` when the advertisement could not be read at all.
+ */
+async function getAdvertisedRef(
+  cloneUrl: string,
+  refName: string,
+): Promise<string | undefined | null> {
+  try {
+    const refs = await getReceivePackRefs(cloneUrl);
+    return refs.refs[refName];
+  } catch {
+    return null;
+  }
+}
+
 async function serverRefMatches(
   cloneUrl: string,
   refUpdate: RefUpdate,
 ): Promise<boolean> {
-  try {
-    const refs = await getReceivePackRefs(cloneUrl);
-    return refs.refs[refUpdate.refName] === refUpdate.newHash;
-  } catch {
-    return false;
-  }
+  return (
+    (await getAdvertisedRef(cloneUrl, refUpdate.refName)) === refUpdate.newHash
+  );
+}
+
+/**
+ * Shared context for pushing one ref update to every Grasp server.
+ *
+ * `baseObjects` / `sharedPackfile` cover the expected case (server ref at the
+ * consensus old hash). `fetchCatchUpObjects` fetches the extra objects a
+ * lagging server needs: everything from its actual head up to the consensus
+ * old hash.
+ */
+interface GraspPushContext {
+  baseObjects: PackableObject[];
+  sharedPackfile: Uint8Array;
+  fetchCatchUpObjects: (
+    tipCommitId: string,
+    stopAtCommitId: string,
+  ) => Promise<PackableObject[] | null>;
 }
 
 async function pushToGraspServer(
   cloneUrl: string,
   refUpdate: RefUpdate,
-  packfile: Uint8Array,
+  ctx: GraspPushContext,
 ): Promise<PushDeliveryOutcome> {
-  if (await serverRefMatches(cloneUrl, refUpdate)) {
+  // Read the server's actual advertised ref. Grasp servers can lag behind the
+  // signed Nostr state (missed earlier pushes), so the consensus old hash is
+  // not necessarily what this server has.
+  const serverHead = await getAdvertisedRef(cloneUrl, refUpdate.refName);
+
+  if (serverHead === refUpdate.newHash) {
     return {
       cloneUrl,
       ok: true,
@@ -441,8 +480,51 @@ async function pushToGraspServer(
     };
   }
 
+  let effectiveUpdate = refUpdate;
+  let packfile = ctx.sharedPackfile;
+
   try {
-    const result = await pushToGitServer(cloneUrl, [refUpdate], packfile);
+    if (serverHead === undefined) {
+      // The server does not have the branch at all (e.g. a fresh mirror).
+      // Create it, sending a bounded catch-up pack of recent history alongside
+      // the base objects. If the repo is deeper than the bound, the server's
+      // connectivity check fails and the outcome reports it.
+      const catchUp = await ctx.fetchCatchUpObjects(refUpdate.oldHash, "");
+      effectiveUpdate = { ...refUpdate, oldHash: ZERO_HASH };
+      packfile = await createPackfile(
+        uniquePackableObjects([...ctx.baseObjects, ...(catchUp ?? [])]),
+      );
+    } else if (serverHead !== null && serverHead !== refUpdate.oldHash) {
+      // The server's ref differs from the consensus old hash — it is behind
+      // (or diverged). Fetch the objects between its head and the consensus
+      // head so the pack is complete from the server's point of view, and use
+      // the server's real head as the old hash so receive-pack accepts the
+      // update. The signed Nostr state event is the source of truth here;
+      // mirrors are brought in line with it even when that is not a
+      // fast-forward for the mirror.
+      const catchUp = await ctx.fetchCatchUpObjects(
+        refUpdate.oldHash,
+        serverHead,
+      );
+      if (!catchUp) {
+        return {
+          cloneUrl,
+          ok: false,
+          message:
+            `server's ${refUpdate.refName} is at ${serverHead.slice(0, 8)} ` +
+            `(expected ${refUpdate.oldHash.slice(0, 8)}) and catch-up objects ` +
+            "could not be fetched",
+        };
+      }
+      effectiveUpdate = { ...refUpdate, oldHash: serverHead };
+      packfile = await createPackfile(
+        uniquePackableObjects([...ctx.baseObjects, ...catchUp]),
+      );
+    }
+    // serverHead === null (advertisement unreadable) or serverHead matches the
+    // consensus old hash: push the shared pack with the consensus update.
+
+    const result = await pushToGitServer(cloneUrl, [effectiveUpdate], packfile);
     const refFailures = result.refResults.filter((r) => !r.ok);
 
     if (result.unpackOk && refFailures.length === 0) {
@@ -855,16 +937,34 @@ export function MergePanel({
       allObjects: PackableObject[],
       refUpdate: RefUpdate,
     ): Promise<PushDeliverySummary> => {
-      // Safety guard at the single push choke point: never advance a branch to
-      // a tip that does not descend from its current tip. A non-fast-forward
-      // push orphans commits already on the branch — the disaster an incorrect
-      // merge base can cause. Throw before sending anything to the git server.
+      // Safety guard at the single push choke point: never advance the signed
+      // Nostr state to a tip that does not descend from the current state tip.
+      // A non-fast-forward update of the state event orphans commits already
+      // on the branch — the disaster an incorrect merge base can cause. Throw
+      // before sending anything. This guards the STATE EVENT only; individual
+      // Grasp mirrors that lag or diverge are forced in line with the signed
+      // state (see pushToGraspServer).
       assertFastForwardSafe(allObjects, refUpdate.oldHash, refUpdate.newHash);
 
-      const packfile = await createPackfile(uniquePackableObjects(allObjects));
+      const baseObjects = uniquePackableObjects(allObjects);
+      const ctx: GraspPushContext = {
+        baseObjects,
+        sharedPackfile: await createPackfile(baseObjects),
+        fetchCatchUpObjects: async (tipCommitId, stopAtCommitId) => {
+          if (!gitPool || !tipCommitId || tipCommitId === ZERO_HASH) {
+            return null;
+          }
+          return gitPool.getPackableObjectsForCommitRange(
+            tipCommitId,
+            stopAtCommitId,
+            new AbortController().signal,
+          );
+        },
+      };
+
       const outcomes = await Promise.all(
         repo.graspCloneUrls.map((cloneUrl) =>
-          pushToGraspServer(cloneUrl, refUpdate, packfile),
+          pushToGraspServer(cloneUrl, refUpdate, ctx),
         ),
       );
       const successCount = outcomes.filter((outcome) => outcome.ok).length;
@@ -889,7 +989,7 @@ export function MergePanel({
 
       return summary;
     },
-    [repo.graspCloneUrls],
+    [repo.graspCloneUrls, gitPool],
   );
 
   // ── Merge orchestration (merge strategy) ─────────────────────────────────
