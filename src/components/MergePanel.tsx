@@ -410,6 +410,12 @@ function summarizePushDelivery(summary: PushDeliverySummary): string {
   return `Pushed to ${summary.successCount}/${summary.totalCount} Grasp server${summary.totalCount !== 1 ? "s" : ""}.`;
 }
 
+function uniquePackableObjects(objects: PackableObject[]): PackableObject[] {
+  const byHash = new Map<string, PackableObject>();
+  for (const object of objects) byHash.set(object.hash, object);
+  return [...byHash.values()];
+}
+
 async function serverRefMatches(
   cloneUrl: string,
   refUpdate: RefUpdate,
@@ -855,7 +861,7 @@ export function MergePanel({
       // merge base can cause. Throw before sending anything to the git server.
       assertFastForwardSafe(allObjects, refUpdate.oldHash, refUpdate.newHash);
 
-      const packfile = await createPackfile(allObjects);
+      const packfile = await createPackfile(uniquePackableObjects(allObjects));
       const outcomes = await Promise.all(
         repo.graspCloneUrls.map((cloneUrl) =>
           pushToGraspServer(cloneUrl, refUpdate, packfile),
@@ -1130,7 +1136,13 @@ export function MergePanel({
   // ── PR merge orchestration ────────────────────────────────────────────────
 
   const handlePRMerge = useCallback(async () => {
-    if (!account || !prMergeability.result || !defaultBranchHead) {
+    if (
+      !account ||
+      !prMergeability.result ||
+      !defaultBranchHead ||
+      !gitPool ||
+      !pr.tip.commitId
+    ) {
       return;
     }
 
@@ -1153,11 +1165,30 @@ export function MergePanel({
       eventStore.add(signedState);
 
       setMergeStep("pushing");
-      // Push the merge commit PLUS any new objects a three-way merge produced
-      // (rebuilt trees + auto-merged blobs). For the fast path extraObjects is
-      // empty and the PR tip's tree already exists on the server.
+      const branchObjects = await gitPool.getPackableObjectsForCommitRange(
+        pr.tip.commitId,
+        prMergeability.result.mergeBase,
+        new AbortController().signal,
+        effectiveCloneUrls,
+      );
+
+      if (!branchObjects) {
+        throw new Error(
+          "Could not fetch the PR branch objects needed for the push. " +
+            "The PR author's clone URL may be unavailable.",
+        );
+      }
+
+      // Push the merge commit, any PR branch objects the target Grasp server
+      // lacks, and any new objects a three-way merge produced (rebuilt trees +
+      // auto-merged blobs). Forked PR commits are not guaranteed to exist on the
+      // target server before this push.
       const pushSummary = await pushObjects(
-        [mergeCommitObj, ...prMergeability.result.extraObjects],
+        [
+          mergeCommitObj,
+          ...branchObjects,
+          ...prMergeability.result.extraObjects,
+        ],
         {
           oldHash: defaultBranchHead,
           newHash: mergeCommitObj.hash,
@@ -1221,6 +1252,8 @@ export function MergePanel({
     defaultBranchHead,
     defaultBranchName,
     defaultBranchRef,
+    gitPool,
+    effectiveCloneUrls,
     pr,
     pushObjects,
     repo,

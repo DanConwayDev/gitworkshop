@@ -42,6 +42,7 @@ import {
 } from "./git-http";
 import { UrlStateManager, UrlTracker } from "./url-state";
 import { StateEventManager } from "./state-event";
+import type { PackableObject } from "@/lib/git-packfile";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -1353,6 +1354,59 @@ export class GitGraspPool {
           maxCommits,
           signal,
           untilHash,
+        );
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+        }
+        return result;
+      },
+      fallbackUrls,
+    );
+  }
+
+  /**
+   * Fetch full, packable git objects for a commit range headed by `tipCommitId`.
+   *
+   * This is used when pushing browser-created PR merge commits. The merge commit
+   * has the PR tip as its second parent, so the target server must also receive
+   * any PR branch commits/blobs it does not already have. `stopAtCommitId` is
+   * used only to estimate the required shallow depth; the returned pack may
+   * include extra already-known objects, which git-receive-pack accepts.
+   */
+  async getPackableObjectsForCommitRange(
+    tipCommitId: string,
+    stopAtCommitId: string,
+    signal: AbortSignal,
+    fallbackUrls?: string[],
+    maxDepth = 200,
+  ): Promise<PackableObject[] | null> {
+    const history = await this.getCommitHistory(
+      tipCommitId,
+      maxDepth,
+      signal,
+      fallbackUrls,
+      stopAtCommitId,
+    );
+    if (signal.aborted) return null;
+
+    if (!history || history.length === 0) return null;
+
+    const stopIndex = history.findIndex(
+      (commit) => commit.hash === stopAtCommitId,
+    );
+    const requestedDepth =
+      stopIndex === -1 ? history.length : Math.max(1, stopIndex);
+
+    return this.withFallback(
+      signal,
+      async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchPackableObjects(
+          url,
+          tipCommitId,
+          requestedDepth,
+          signal,
         );
         if (result) {
           const tracker = this.urlManager.get(url);
