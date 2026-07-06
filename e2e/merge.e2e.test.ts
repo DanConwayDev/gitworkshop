@@ -22,10 +22,10 @@
  *     and point at the new merge commit.
  *
  * `performMerge` is the plain-module extraction of `MergePanel.handleMerge`
- * (see `src/lib/perform-merge.ts`); the React component now calls the same
- * function, so this test covers the production path. Transport is injected so
- * we publish ONLY to the local grasp relay (via `RelayClient`) and push ONLY to
- * the local grasp git server — never `@/services/nostr`.
+ * (see `src/lib/git-grasp-pool/merge.ts`); the React component now calls the
+ * same function, so this test covers the production path. Transport is
+ * injected so we publish ONLY to the local grasp relay (via `RelayClient`)
+ * and push ONLY to the local grasp git server — never `@/services/nostr`.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -48,8 +48,11 @@ import {
   buildPatchChainObjects,
   type PatchChainBuildResult,
 } from "@/lib/patch-merge";
-import { performMerge, buildPRNevent } from "@/lib/perform-merge";
-import { performPRMerge } from "@/lib/perform-pr-merge";
+import {
+  performMerge,
+  buildPRNevent,
+  performPRMerge,
+} from "@/lib/git-grasp-pool";
 import { GitGraspPool } from "@/lib/git-grasp-pool";
 import {
   createPackfile,

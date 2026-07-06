@@ -42,7 +42,13 @@ import {
 } from "./git-http";
 import { UrlStateManager, UrlTracker } from "./url-state";
 import { StateEventManager } from "./state-event";
+import {
+  pushRefUpdateToGraspServers,
+  type PushDeliverySummary,
+} from "./grasp-push";
+import type { NostrEvent } from "nostr-tools";
 import type { PackableObject } from "@/lib/git-packfile";
+import { ZERO_HASH, type RefUpdate } from "@/lib/git-push";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -1449,6 +1455,53 @@ export class GitGraspPool {
       },
       fallbackUrls,
     );
+  }
+
+  /**
+   * Push one ref update (plus any state-event refs a server is missing) to
+   * the given Grasp servers, in parallel, tolerating lagging mirrors.
+   *
+   * The pool supplies catch-up objects via
+   * {@link getPackableObjectsForCommitRange}; see `grasp-push.ts` for the
+   * per-server semantics. Guards the signed Nostr state with a fast-forward
+   * check before anything is sent. Resolves once at least one server
+   * accepted; throws when every server rejected.
+   *
+   * @param objects - All objects required for the primary update.
+   * @param refUpdate - The primary ref update (consensus old hash → new hash).
+   * @param options.targetCloneUrls - Grasp server clone URLs to push to
+   *   (usually the repo's announced Grasp URLs, not the pool's full URL set).
+   * @param options.currentStateEvent - Current kind:30618 state; its refs form
+   *   the post-push ref set every server is verified against.
+   * @param options.fallbackUrls - Extra URLs for catch-up object fetches.
+   */
+  async pushRefUpdate(
+    objects: PackableObject[],
+    refUpdate: RefUpdate,
+    options: {
+      targetCloneUrls: string[];
+      currentStateEvent?: NostrEvent | null;
+      fallbackUrls?: string[];
+      signal?: AbortSignal;
+    },
+  ): Promise<PushDeliverySummary> {
+    return pushRefUpdateToGraspServers({
+      cloneUrls: options.targetCloneUrls,
+      objects,
+      refUpdate,
+      currentStateEvent: options.currentStateEvent,
+      fetchCatchUpObjects: (tipCommitId, stopAtCommitId) => {
+        if (!tipCommitId || tipCommitId === ZERO_HASH) {
+          return Promise.resolve(null);
+        }
+        return this.getPackableObjectsForCommitRange(
+          tipCommitId,
+          stopAtCommitId,
+          options.signal ?? new AbortController().signal,
+          options.fallbackUrls,
+        );
+      },
+    });
   }
 
   /**
