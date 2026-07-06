@@ -19,16 +19,37 @@ export { TestSigner } from "./test-signer";
 export { RelayClient } from "./relay-client";
 export {
   seedRepo,
+  seedMultiServerRepo,
+  advanceBranch,
+  seedTag,
   buildAnnouncement,
   buildState,
+  buildStateWithRefs,
+  waitUntilAfterUnixSecond,
   npubToHex,
   REPO_KIND,
   REPO_STATE_KIND,
   type SeedRepoOptions,
   type SeededRepo,
+  type SeededRepoServer,
+  type SeededMultiServerRepo,
+  type AdvanceBranchOptions,
+  type AdvanceBranchResult,
+  type SeedTagOptions,
+  type SeedTagResult,
 } from "./repo-fixture";
 export {
   seedPatchPR,
   type SeedPatchPROptions,
   type SeededPatchPR,
 } from "./seed-patch-pr";
+export {
+  seedKindPR,
+  type SeedKindPROptions,
+  type SeededKindPR,
+} from "./seed-kind-pr";
+export {
+  makePoolTransports,
+  type MakePoolTransportsOptions,
+  type PoolTransportsResult,
+} from "./merge-transports";

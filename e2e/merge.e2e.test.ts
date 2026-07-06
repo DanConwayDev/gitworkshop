@@ -29,7 +29,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { finalizeEvent, type NostrEvent } from "nostr-tools";
+import type { NostrEvent } from "nostr-tools";
 import { EventStore } from "applesauce-core";
 import {
   GraspServer,
@@ -37,6 +37,7 @@ import {
   TestSigner,
   seedRepo,
   seedPatchPR,
+  seedKindPR,
   graspBinaryAvailable,
   REPO_STATE_KIND,
   type SeededRepo,
@@ -54,12 +55,7 @@ import {
   performPRMerge,
 } from "@/lib/git-grasp-pool";
 import { GitGraspPool } from "@/lib/git-grasp-pool";
-import {
-  createPackfile,
-  packBlob,
-  packCommit,
-  packTree,
-} from "@/lib/git-packfile";
+import { createPackfile } from "@/lib/git-packfile";
 import {
   pushToGitServer,
   getReceivePackRefs,
@@ -67,7 +63,7 @@ import {
   type RefUpdate,
 } from "@/lib/git-push";
 import type { PackableObject } from "@/lib/git-packfile";
-import type { CommitPerson, TreeEntry } from "@/lib/git-objects";
+import type { CommitPerson } from "@/lib/git-objects";
 import { PR_KIND, STATUS_RESOLVED } from "@/lib/nip34";
 
 const describeIfGrasp = graspBinaryAvailable() ? describe : describe.skip;
@@ -77,124 +73,6 @@ const describeIfGrasp = graspBinaryAvailable() ? describe : describe.skip;
 // (`indexedDB is not defined` in node — see e2e/HANDOFF.md) is fixed in
 // src/lib/git-grasp-pool/cache.ts, so the full merge path runs end-to-end here.
 const describeMerge = describeIfGrasp;
-
-interface SeededKindPR {
-  pr: NostrEvent;
-  commit: string;
-  state: NostrEvent;
-  branch: string;
-}
-
-async function waitUntilAfterUnixSecond(timestamp: number): Promise<void> {
-  while (Math.floor(Date.now() / 1000) <= timestamp) {
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-}
-
-async function seedKindPR(
-  repo: SeededRepo,
-  relay: RelayClient,
-  maintainer: TestSigner,
-  contributor: TestSigner,
-  options: {
-    branch: string;
-    path: string;
-    content: string;
-    subject: string;
-    body?: string;
-  },
-): Promise<SeededKindPR> {
-  const timestamp = repo.headCommitTimestamp + 60;
-  const person: CommitPerson = {
-    name: "e2e PR contributor",
-    email: `${contributor.npub}@nostr`,
-    timestamp,
-    timezone: "+0000",
-  };
-
-  const blob = await packBlob(new TextEncoder().encode(options.content));
-  const baseEntries: TreeEntry[] = Object.entries(repo.blobHashes).map(
-    ([name, hash]) => ({ mode: "100644", name, hash }),
-  );
-  const treeEntries: TreeEntry[] = [
-    ...baseEntries.filter((entry) => entry.name !== options.path),
-    { mode: "100644", name: options.path, hash: blob.hash },
-  ];
-  const tree = await packTree(treeEntries);
-  const commit = await packCommit({
-    treeHash: tree.hash,
-    parentHashes: [repo.headCommit],
-    author: person,
-    committer: person,
-    message: options.body
-      ? `${options.subject}\n\n${options.body}`
-      : options.subject,
-  });
-
-  const prBranchRef = `refs/heads/${options.branch}`;
-  const state = finalizeEvent(
-    {
-      kind: REPO_STATE_KIND,
-      created_at: Math.floor(Date.now() / 1000),
-      content: "",
-      tags: [
-        ["d", repo.identifier],
-        [`refs/heads/${repo.branch}`, repo.headCommit],
-        [prBranchRef, commit.hash],
-        ["HEAD", `ref: refs/heads/${repo.branch}`],
-      ],
-    },
-    maintainer.secretKey,
-  );
-  await relay.publish(state);
-
-  const packfile = await createPackfile([blob, tree, commit]);
-  const pushResult = await pushToGitServer(
-    repo.cloneUrl,
-    [
-      {
-        oldHash: ZERO_HASH,
-        newHash: commit.hash,
-        refName: prBranchRef,
-      },
-    ],
-    packfile,
-  );
-  if (!pushResult.unpackOk || !pushResult.refResults.every((r) => r.ok)) {
-    throw new Error(
-      `seedKindPR: branch push failed (unpackOk=${pushResult.unpackOk}): ` +
-        pushResult.refResults
-          .map((r) => `${r.refName}=${r.ok ? "ok" : r.reason}`)
-          .join(", "),
-    );
-  }
-
-  // The merge will publish a replacement kind:30618. Tick past this state's
-  // second so the merged state wins deterministically on relays with same-second
-  // replaceable tie behaviour.
-  await waitUntilAfterUnixSecond(state.created_at);
-
-  const pr = finalizeEvent(
-    {
-      kind: PR_KIND,
-      created_at: Math.floor(Date.now() / 1000),
-      content: options.body ?? "",
-      tags: [
-        ["a", repo.coordinate],
-        ["subject", options.subject],
-        ["c", commit.hash],
-        ["merge-base", repo.headCommit],
-        ["clone", repo.cloneUrl],
-        ["p", repo.pubkey],
-        ["alt", `git pull request: ${options.subject}`],
-      ],
-    },
-    contributor.secretKey,
-  );
-  await relay.publish(pr);
-
-  return { pr, commit: commit.hash, state, branch: options.branch };
-}
 
 describeMerge("e2e — Merge button (merge strategy)", () => {
   let server: GraspServer;
