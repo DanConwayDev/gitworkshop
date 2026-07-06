@@ -1558,6 +1558,7 @@ export default function PRPage() {
                       behindCount={behindCount}
                       defaultBranchName={defaultBranchName ?? "main"}
                       defaultBranchHead={defaultBranchHead}
+                      currentStateEvent={repoState?.event}
                       guessedBaseCommitId={
                         pr.itemType === "patch" && patchMergeBase.isGuessed
                           ? patchMergeBase.baseCommitId

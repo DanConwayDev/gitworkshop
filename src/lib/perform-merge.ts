@@ -74,6 +74,8 @@ export interface PerformMergeParams {
   defaultBranchName: string;
   /** Current HEAD of the default branch (first merge-commit parent / oldHash). */
   defaultBranchHead: string;
+  /** Current kind:30618 repository state, used to preserve all existing refs. */
+  currentStateEvent?: NostrEvent | null;
   /** All repo coordinates ("30617:<pubkey>:<d>") for the status #a tags. */
   repoCoords: string[];
 
@@ -161,6 +163,7 @@ export async function performMerge(
     dTag,
     defaultBranchName,
     defaultBranchHead,
+    currentStateEvent,
     repoCoords,
     rootEventId,
     rootAuthorPubkey,
@@ -210,8 +213,9 @@ export async function performMerge(
   assertFastForwardSafe(allObjects, defaultBranchHead, mergeCommit.hash);
 
   // ── Step 2: Publish state to Grasp (purgatory) ──────────────────────────
-  const state = await RepoStateFactory.create(
+  const state = await RepoStateFactory.updateBranch(
     dTag,
+    currentStateEvent,
     mergeCommit.hash,
     defaultBranchName,
   ).sign(signer);

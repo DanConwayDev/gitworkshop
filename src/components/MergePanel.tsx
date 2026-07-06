@@ -126,6 +126,8 @@ interface MergePanelProps {
   defaultBranchName: string;
   /** The current HEAD commit of the default branch */
   defaultBranchHead: string | undefined;
+  /** Current kind:30618 repository state, used to preserve existing branches/tags. */
+  currentStateEvent?: NostrEvent | null;
   /**
    * Guessed base commit ID from the timestamp heuristic, used when the first
    * patch has no `parent-commit` tag. Passed through to usePatchMergeability.
@@ -652,6 +654,7 @@ export function MergePanel({
   behindCount,
   defaultBranchName,
   defaultBranchHead,
+  currentStateEvent,
   guessedBaseCommitId,
   prNevent,
   onSuccessfulPush,
@@ -1082,6 +1085,7 @@ export function MergePanel({
         dTag: repo.dTag,
         defaultBranchName,
         defaultBranchHead,
+        currentStateEvent,
         repoCoords: pr.repoCoords,
         rootEventId: pr.rootEvent.id,
         rootAuthorPubkey: pr.pubkey,
@@ -1137,6 +1141,7 @@ export function MergePanel({
     account,
     mergeability.buildResult,
     defaultBranchHead,
+    currentStateEvent,
     defaultBranchName,
     gitPool,
     profile,
@@ -1170,8 +1175,9 @@ export function MergePanel({
       const { objects, newTipCommitHash } = mergeability.applyResult;
 
       // Publish state event pointing to the new tip
-      const signedState = await RepoStateFactory.create(
+      const signedState = await RepoStateFactory.updateBranch(
         repo.dTag,
+        currentStateEvent,
         newTipCommitHash,
         defaultBranchName,
       ).sign(account.signer);
@@ -1251,6 +1257,7 @@ export function MergePanel({
     account,
     mergeability.applyResult,
     defaultBranchHead,
+    currentStateEvent,
     defaultBranchName,
     defaultBranchRef,
     gitPool,
@@ -1284,8 +1291,9 @@ export function MergePanel({
       const { mergeCommitObj } = prMergeability.result;
 
       // ── Step 2+3: Publish state + push ────────────────────────────────
-      const signedState = await RepoStateFactory.create(
+      const signedState = await RepoStateFactory.updateBranch(
         repo.dTag,
+        currentStateEvent,
         mergeCommitObj.hash,
         defaultBranchName,
       ).sign(account.signer);
@@ -1380,6 +1388,7 @@ export function MergePanel({
     account,
     prMergeability.result,
     defaultBranchHead,
+    currentStateEvent,
     defaultBranchName,
     defaultBranchRef,
     gitPool,
