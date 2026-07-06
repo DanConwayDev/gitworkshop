@@ -1,43 +1,27 @@
 /**
- * MergePanel — merge/apply button and status panel for patch-type PRs on Grasp repos.
+ * MergePanel — merge/apply button and status panel for PRs on Grasp repos.
  *
  * Shown at the bottom of the conversation tab, above the reply box. Eagerly
- * checks whether the patch chain can be merged or applied and shows one of:
+ * checks whether the patch chain / PR branch can be merged or applied and
+ * shows one of:
  *   - "Ready to merge" with a green Merge button (merge strategy succeeded)
  *   - "Apply to Tip" with an amber Apply button + warning (only apply-to-tip works)
  *   - "Conflicts detected" with file-level details
  *   - "Error" with a human-readable message
  *
- * Two strategies are tried in parallel:
+ * The heavy lifting lives in `@/lib/git-grasp-pool`:
+ *   - `performMerge` / `performPRMerge` / `performApplyToTip` — the shared
+ *     purgatory → push → status → broadcast orchestration (`merge.ts`).
+ *   - `GitGraspPool.pushRefUpdate` — the multi-server Grasp push that
+ *     tolerates lagging mirrors (`grasp-push.ts`).
+ *   - `useDetectedMergeCommit` — best-effort "already merged?" history scan
+ *     (`detect-merged.ts`).
  *
- *   **Merge** (preferred): applies patches against the original merge-base
- *   (parent-commit tag, or timestamp-guessed), then creates a merge commit
- *   with two parents (defaultBranchHead + patchTipCommit). Preserves history.
- *
- *   **Apply to Tip**: applies patches directly on top of the current default
- *   branch HEAD, producing linear commits (no merge commit). Used as a fallback
- *   when the merge strategy fails (e.g. guessed base is wrong, or the patch
- *   doesn't apply cleanly against the original base).
- *
- * The merge orchestration sequence (merge strategy):
- *   1. Build merge commit (pure computation, sub-millisecond)
- *   2. Publish kind:30618 state event to Grasp relays ONLY (purgatory)
- *   3. Push packfile to Grasp git server(s)
- *   4. Publish kind:1631 merged status event to all relay groups
- *   5. Publish kind:30618 to remaining relays (user outbox, repo relays)
- *
- * The apply-to-tip sequence:
- *   1. (Objects already built in usePatchMergeability)
- *   2. Publish kind:30618 state event to Grasp relays ONLY (purgatory)
- *   3. Push packfile to Grasp git server(s)
- *   4. Publish kind:1631 merged status event to all relay groups
- *   5. Publish kind:30618 to remaining relays
- *
- * If step 3 fails, the state event expires from purgatory after 30 minutes.
- * No manual rollback needed.
+ * This component only wires those up with the app's account, outbox, relay
+ * pool, and EventStore, and renders the states.
  */
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { nip19 } from "nostr-tools";
 import type { NostrEvent } from "nostr-tools";
@@ -80,25 +64,26 @@ import {
   usePRMergeability,
   type PRMergeabilityStatus,
 } from "@/hooks/usePRMergeability";
-import { createPackfile, type PackableObject } from "@/lib/git-packfile";
+import { useDetectedMergeCommit } from "@/hooks/useDetectedMergeCommit";
 import {
-  getReceivePackRefs,
-  pushToGitServer,
-  type RefUpdate,
-} from "@/lib/git-push";
-import { performMerge } from "@/lib/perform-merge";
-import { assertFastForwardSafe } from "@/lib/patch-merge";
+  performMerge,
+  performPRMerge,
+  performApplyToTip,
+  signMergedStatus,
+  buildPRNevent,
+  createCommitPersonNow,
+  summarizePushDelivery,
+  formatCloneUrlHost,
+  getGitRemoteHostname,
+  type GitGraspPool,
+  type GraspMergeTransports,
+  type PushDeliverySummary,
+} from "@/lib/git-grasp-pool";
 import { pool as relayPool, eventStore } from "@/services/nostr";
 import { outboxStore } from "@/services/outbox";
 
-import { RepoStateFactory } from "@/factories/RepoStateFactory";
-import {
-  StatusChangeFactory,
-  STATUS_KIND_MAP,
-} from "@/factories/StatusChangeFactory";
 import type { CommitPerson } from "@/lib/git-objects";
 import type { Patch } from "@/casts/Patch";
-import type { Commit, GitGraspPool } from "@/lib/git-grasp-pool";
 import type { ResolvedRepo, ResolvedPR } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
@@ -125,6 +110,8 @@ interface MergePanelProps {
   defaultBranchName: string;
   /** The current HEAD commit of the default branch */
   defaultBranchHead: string | undefined;
+  /** Current kind:30618 repository state, used to preserve existing branches/tags. */
+  currentStateEvent?: NostrEvent | null;
   /**
    * Guessed base commit ID from the timestamp heuristic, used when the first
    * patch has no `parent-commit` tag. Passed through to usePatchMergeability.
@@ -157,203 +144,9 @@ type MergeStep =
 type MergePanelStatus =
   MergeabilityStatus | PRMergeabilityStatus | "detected-merged";
 
-interface DetectedMergeCommit {
-  hash: string;
-  subject: string;
-}
-
-interface DetectedMergeScanResult {
-  commit: DetectedMergeCommit | null;
-  scannedCount: number;
-  reachedStopCommit: boolean;
-  reachedHistoryRoot: boolean;
-  hitLimit: boolean;
-  maxTotal: number;
-}
-
-interface PushDeliveryOutcome {
-  cloneUrl: string;
-  ok: boolean;
-  message: string;
-}
-
-interface PushDeliverySummary {
-  outcomes: PushDeliveryOutcome[];
-  successCount: number;
-  totalCount: number;
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Commit-history batch size. Matches git-grasp-pool's default merge-base/count
- * batch size so this usually reuses history already fetched for PR mergeability
- * and behind-count checks.
- */
-const DETECTED_MERGE_HISTORY_BATCH_SIZE = 200;
-
-/** Default cap when no explicit base bounds the search. */
-const DETECTED_MERGE_HISTORY_MAX_WITHOUT_BASE = 500;
-
-/** Default cap when an explicit base lets us safely walk deeper. */
-const DETECTED_MERGE_HISTORY_MAX_WITH_BASE = 1000;
-
-/** Extra commits scanned each time the user opts into a deeper look-back. */
-const DETECTED_MERGE_HISTORY_LOOKBACK_STEP = 1000;
-
-function firstCommitSubject(message: string): string {
-  return message.split("\n", 1)[0]?.trim() ?? "";
-}
-
-function messageReferencesRootEvent(
-  message: string,
-  rootEventId: string,
-): boolean {
-  const re = /nostr:(nevent1[023456789acdefghjklmnpqrstuvwxyz]+)/g;
-  for (const match of message.matchAll(re)) {
-    const nevent = match[1];
-    if (!nevent) continue;
-    try {
-      const decoded = nip19.decode(nevent);
-      if (decoded.type === "nevent" && decoded.data.id === rootEventId) {
-        return true;
-      }
-    } catch {
-      // Ignore malformed nostr: lines in arbitrary commit messages.
-    }
-  }
-  return false;
-}
-
-function findDetectedNgitMergeCommit(
-  commits: Commit[],
-  rootEventId: string,
-  tipCommitId?: string,
-): DetectedMergeCommit | null {
-  const mergeSubjectPrefix = `Merge #${rootEventId.slice(0, 8)}:`;
-
-  for (const commit of commits) {
-    if (commit.parents.length < 2) continue;
-    if (tipCommitId && !commit.parents.includes(tipCommitId)) continue;
-
-    const subject = firstCommitSubject(commit.message);
-    const referencesRoot =
-      subject.startsWith(mergeSubjectPrefix) ||
-      messageReferencesRootEvent(commit.message, rootEventId);
-
-    if (referencesRoot) {
-      return { hash: commit.hash, subject };
-    }
-  }
-
-  return null;
-}
-
-async function findDetectedNgitMergeCommitInHistory(
-  gitPool: GitGraspPool,
-  defaultBranchHead: string,
-  rootEventId: string,
-  signal: AbortSignal,
-  fallbackUrls: string[],
-  maxTotal: number,
-  tipCommitId?: string,
-  stopAtCommitHash?: string,
-): Promise<DetectedMergeScanResult> {
-  let offset = 0;
-  let batchStart = defaultBranchHead;
-
-  while (offset < maxTotal) {
-    if (signal.aborted) {
-      return {
-        commit: null,
-        scannedCount: offset,
-        reachedStopCommit: false,
-        reachedHistoryRoot: false,
-        hitLimit: false,
-        maxTotal,
-      };
-    }
-
-    const remaining = maxTotal - offset;
-    const batchSize = Math.min(DETECTED_MERGE_HISTORY_BATCH_SIZE, remaining);
-    const batch = await gitPool.getCommitHistory(
-      batchStart,
-      batchSize,
-      signal,
-      fallbackUrls,
-    );
-
-    if (!batch || batch.length === 0 || signal.aborted) {
-      return {
-        commit: null,
-        scannedCount: offset,
-        reachedStopCommit: false,
-        reachedHistoryRoot: false,
-        hitLimit: false,
-        maxTotal,
-      };
-    }
-
-    const stopIdx = stopAtCommitHash
-      ? batch.findIndex((commit) => commit.hash === stopAtCommitHash)
-      : -1;
-    const searchableBatch =
-      stopIdx === -1 ? batch : batch.slice(0, stopIdx + 1);
-    const scannedCount = offset + searchableBatch.length;
-    const detected = findDetectedNgitMergeCommit(
-      searchableBatch,
-      rootEventId,
-      tipCommitId,
-    );
-    if (detected) {
-      return {
-        commit: detected,
-        scannedCount,
-        reachedStopCommit: stopIdx !== -1,
-        reachedHistoryRoot: false,
-        hitLimit: false,
-        maxTotal,
-      };
-    }
-
-    if (stopIdx !== -1) {
-      return {
-        commit: null,
-        scannedCount,
-        reachedStopCommit: true,
-        reachedHistoryRoot: false,
-        hitLimit: false,
-        maxTotal,
-      };
-    }
-
-    offset += batch.length;
-
-    const tail = batch[batch.length - 1];
-    if (tail.parents.length === 0) {
-      return {
-        commit: null,
-        scannedCount: offset,
-        reachedStopCommit: false,
-        reachedHistoryRoot: true,
-        hitLimit: false,
-        maxTotal,
-      };
-    }
-    batchStart = tail.parents[0];
-  }
-
-  return {
-    commit: null,
-    scannedCount: offset,
-    reachedStopCommit: false,
-    reachedHistoryRoot: false,
-    hitLimit: true,
-    maxTotal,
-  };
-}
 
 /**
  * Returns true if a relay URL's hostname matches one of the Grasp server domains.
@@ -365,21 +158,6 @@ function isGraspRelay(relayUrl: string, graspDomains: string[]): boolean {
     return graspDomains.includes(hostname);
   } catch {
     return false;
-  }
-}
-
-/**
- * Extract a hostname from common HTTP(S), SSH, and scp-style git remote URLs.
- */
-function getGitRemoteHostname(cloneUrl: string): string | undefined {
-  try {
-    return new URL(cloneUrl).hostname;
-  } catch {
-    const sshMatch = cloneUrl.match(/^(?:[^@\s]+@)?([^:\s]+):/);
-    if (sshMatch?.[1]) return sshMatch[1];
-
-    const schemeMatch = cloneUrl.match(/^[a-z][a-z0-9+.-]*:\/\/([^/]+)/i);
-    return schemeMatch?.[1];
   }
 }
 
@@ -400,93 +178,6 @@ function formatGitServerName(cloneUrls: string[]): string {
   }
 
   return hostname;
-}
-
-function formatCloneUrlHost(cloneUrl: string): string {
-  return getGitRemoteHostname(cloneUrl) ?? cloneUrl;
-}
-
-function summarizePushDelivery(summary: PushDeliverySummary): string {
-  return `Pushed to ${summary.successCount}/${summary.totalCount} Grasp server${summary.totalCount !== 1 ? "s" : ""}.`;
-}
-
-async function serverRefMatches(
-  cloneUrl: string,
-  refUpdate: RefUpdate,
-): Promise<boolean> {
-  try {
-    const refs = await getReceivePackRefs(cloneUrl);
-    return refs.refs[refUpdate.refName] === refUpdate.newHash;
-  } catch {
-    return false;
-  }
-}
-
-async function pushToGraspServer(
-  cloneUrl: string,
-  refUpdate: RefUpdate,
-  packfile: Uint8Array,
-): Promise<PushDeliveryOutcome> {
-  if (await serverRefMatches(cloneUrl, refUpdate)) {
-    return {
-      cloneUrl,
-      ok: true,
-      message: "already has the new commit",
-    };
-  }
-
-  try {
-    const result = await pushToGitServer(cloneUrl, [refUpdate], packfile);
-    const refFailures = result.refResults.filter((r) => !r.ok);
-
-    if (result.unpackOk && refFailures.length === 0) {
-      return {
-        cloneUrl,
-        ok: true,
-        message: "accepted",
-      };
-    }
-
-    if (await serverRefMatches(cloneUrl, refUpdate)) {
-      return {
-        cloneUrl,
-        ok: true,
-        message: "accepted; server reported a stale failure",
-      };
-    }
-
-    if (!result.unpackOk) {
-      return {
-        cloneUrl,
-        ok: false,
-        message: "unpack failed",
-      };
-    }
-
-    const failures = refFailures
-      .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
-      .join("; ");
-
-    return {
-      cloneUrl,
-      ok: false,
-      message: failures || "ref update rejected",
-    };
-  } catch (err) {
-    if (await serverRefMatches(cloneUrl, refUpdate)) {
-      return {
-        cloneUrl,
-        ok: true,
-        message: "accepted; confirmation failed",
-      };
-    }
-
-    return {
-      cloneUrl,
-      ok: false,
-      message: err instanceof Error ? err.message : "push failed",
-    };
-  }
 }
 
 /**
@@ -534,6 +225,7 @@ export function MergePanel({
   behindCount,
   defaultBranchName,
   defaultBranchHead,
+  currentStateEvent,
   guessedBaseCommitId,
   prNevent,
   onSuccessfulPush,
@@ -555,37 +247,37 @@ export function MergePanel({
   const [pushDelivery, setPushDelivery] = useState<PushDeliverySummary | null>(
     null,
   );
-  const [detectedMergeCommit, setDetectedMergeCommit] =
-    useState<DetectedMergeCommit | null>(null);
-  const [detectedMergeScanResult, setDetectedMergeScanResult] =
-    useState<DetectedMergeScanResult | null>(null);
-  const [detectingMergeCommit, setDetectingMergeCommit] = useState(false);
-  const [detectedMergeExtraLookback, setDetectedMergeExtraLookback] =
-    useState(0);
 
   const supportsBrowserMerge = repo.graspCloneUrls.length > 0;
   const localMergeCommand = `ngit merge ${pr.rootEvent.id.slice(0, 8)} && git push`;
   const gitServerName = formatGitServerName(repo.additionalGitServerUrls);
 
-  // Build the maintainer CommitPerson for the apply-to-tip path
-  const maintainerCommitter: CommitPerson | undefined = useMemo(() => {
+  // Committer identity for browser-created commits. The memoised value feeds
+  // the mergeability hooks (which pre-build objects); the builder is called
+  // again at click time so pushed commits carry the actual merge time.
+  const buildCommitterNow = useCallback((): CommitPerson | undefined => {
     if (!account) return undefined;
-    const now = Math.floor(Date.now() / 1000);
-    const tzOffset = new Date().getTimezoneOffset();
-    const tzSign = tzOffset <= 0 ? "+" : "-";
-    const tzHours = Math.floor(Math.abs(tzOffset) / 60)
-      .toString()
-      .padStart(2, "0");
-    const tzMins = (Math.abs(tzOffset) % 60).toString().padStart(2, "0");
-    return {
-      name: profile?.displayName || profile?.name || "Anonymous",
-      email: profile?.nip05 ?? `${nip19.npubEncode(account.pubkey)}@nostr`,
-      timestamp: now,
-      timezone: `${tzSign}${tzHours}${tzMins}`,
-    };
+    return createCommitPersonNow(
+      profile?.displayName || profile?.name || "Anonymous",
+      profile?.nip05 ?? `${nip19.npubEncode(account.pubkey)}@nostr`,
+    );
   }, [account, profile]);
 
+  const maintainerCommitter = useMemo(
+    () => buildCommitterNow(),
+    [buildCommitterNow],
+  );
+
   const isPRType = pr.itemType === "pr";
+
+  const patchEventIds = useMemo(
+    () =>
+      (patchChain ?? []).map((patch) => ({
+        id: patch.event.id,
+        pubkey: patch.pubkey,
+      })),
+    [patchChain],
+  );
 
   const patchTipCommitId = useMemo(() => {
     if (isPRType || !patchChain?.length) return undefined;
@@ -596,20 +288,6 @@ export function MergePanel({
   const detectionStopCommitId = isPRType
     ? pr.tip.explicitMergeBase
     : patchChain?.[0]?.parentCommitId;
-  const detectionScanBaseLimit = detectionStopCommitId
-    ? DETECTED_MERGE_HISTORY_MAX_WITH_BASE
-    : DETECTED_MERGE_HISTORY_MAX_WITHOUT_BASE;
-  const detectionScanLimit =
-    detectionScanBaseLimit + detectedMergeExtraLookback;
-
-  useEffect(() => {
-    setDetectedMergeExtraLookback(0);
-  }, [
-    pr.rootEvent.id,
-    defaultBranchHead,
-    detectionTipCommitId,
-    detectionStopCommitId,
-  ]);
 
   // Eagerly check mergeability — both strategies in parallel (patch-type only)
   const patchMergeability = usePatchMergeability(
@@ -670,54 +348,23 @@ export function MergePanel({
       mergeability.status === "conflicts" ||
       (!supportsBrowserMerge && mergeability.status !== "loading"));
 
-  useEffect(() => {
-    setDetectedMergeCommit(null);
-    setDetectedMergeScanResult(null);
-
-    if (!gitPool || !defaultBranchHead || !shouldScanForMissingMergedStatus) {
-      setDetectingMergeCommit(false);
-      return;
-    }
-
-    const abort = new AbortController();
-    setDetectingMergeCommit(true);
-
-    findDetectedNgitMergeCommitInHistory(
-      gitPool,
-      defaultBranchHead,
-      pr.rootEvent.id,
-      abort.signal,
-      effectiveCloneUrls,
-      detectionScanLimit,
-      detectionTipCommitId,
-      detectionStopCommitId,
-    )
-      .then((result) => {
-        if (abort.signal.aborted) return;
-        setDetectedMergeCommit(result.commit);
-        setDetectedMergeScanResult(result);
-      })
-      .catch(() => {
-        if (!abort.signal.aborted) {
-          setDetectedMergeCommit(null);
-          setDetectedMergeScanResult(null);
-        }
-      })
-      .finally(() => {
-        if (!abort.signal.aborted) setDetectingMergeCommit(false);
-      });
-
-    return () => abort.abort();
-  }, [
+  // Best-effort scan for an ngit-style merge commit whose kind:1631 merged
+  // status never made it to the relays.
+  const {
+    detectedMergeCommit,
+    scanResult: detectedMergeScanResult,
+    detecting: detectingMergeCommit,
+    lookBackFurther,
+    lookbackStep,
+  } = useDetectedMergeCommit({
     gitPool,
     defaultBranchHead,
-    effectiveCloneUrls,
-    shouldScanForMissingMergedStatus,
-    pr.rootEvent.id,
-    detectionTipCommitId,
-    detectionStopCommitId,
-    detectionScanLimit,
-  ]);
+    rootEventId: pr.rootEvent.id,
+    fallbackUrls: effectiveCloneUrls,
+    enabled: shouldScanForMissingMergedStatus,
+    tipCommitId: detectionTipCommitId,
+    stopAtCommitId: detectionStopCommitId,
+  });
 
   const mergeabilityCheckWillStart =
     supportsBrowserMerge &&
@@ -730,8 +377,6 @@ export function MergePanel({
     : mergeabilityCheckWillStart
       ? "loading"
       : mergeability.status;
-
-  const defaultBranchRef = `refs/heads/${defaultBranchName}`;
 
   // Grasp relay URLs: repo relays whose hostname matches a Grasp server domain
   const graspRelayUrls = useMemo(
@@ -778,32 +423,90 @@ export function MergePanel({
     }
   }, [localMergeCommand, toast]);
 
+  // ── Shared merge wiring ──────────────────────────────────────────────────
+
+  /**
+   * Build the transports every merge strategy runs against: state events go
+   * to the Grasp relays (purgatory), the push fans out to every Grasp server
+   * via the pool, and status/state broadcasts go through the outbox. The
+   * returned `getPushSummary` exposes the delivery summary for the success
+   * toast.
+   */
+  const createMergeTransports = useCallback(
+    (accountPubkey: string) => {
+      let pushSummary: PushDeliverySummary | null = null;
+
+      const transports: GraspMergeTransports = {
+        publishStateToGrasp: (state) =>
+          publishToGraspRelays(state, graspRelayUrls),
+        pushObjects: async (objects, refUpdate) => {
+          if (!gitPool) throw new Error("Git pool unavailable");
+          const summary = await gitPool.pushRefUpdate(objects, refUpdate, {
+            targetCloneUrls: repo.graspCloneUrls,
+            currentStateEvent,
+          });
+          pushSummary = summary;
+          setPushDelivery(summary);
+          onSuccessfulPush?.();
+        },
+        publishStatusBroadly: (status) =>
+          outboxStore.publish(status, [
+            `outbox:${accountPubkey}`,
+            ...repo.allCoordinates,
+            ...(pr.pubkey !== accountPubkey ? [`inbox:${pr.pubkey}`] : []),
+          ]),
+        broadcastStateBroadly: (state) =>
+          outboxStore.publish(state, [
+            `outbox:${accountPubkey}`,
+            ...repo.allCoordinates,
+            "fallback-relays",
+          ]),
+        onEvent: (event) => eventStore.add(event),
+        onStep: (step) => setMergeStep(step),
+      };
+
+      return { transports, getPushSummary: () => pushSummary };
+    },
+    [
+      gitPool,
+      graspRelayUrls,
+      repo.graspCloneUrls,
+      repo.allCoordinates,
+      currentStateEvent,
+      pr.pubkey,
+      onSuccessfulPush,
+    ],
+  );
+
+  const beginMerge = useCallback(() => {
+    setMergeStep("building");
+    setMergeError(null);
+    setPushDelivery(null);
+  }, []);
+
+  const failMerge = useCallback(
+    (err: unknown, title: string, fallbackMessage: string) => {
+      const message = err instanceof Error ? err.message : fallbackMessage;
+      setMergeStep("failed");
+      setMergeError(message);
+      toast({ title, description: message, variant: "destructive" });
+    },
+    [toast],
+  );
+
   const publishMergedStatus = useCallback(
     async (mergeCommitHash: string): Promise<void> => {
       if (!account) return;
 
-      const statusKind = STATUS_KIND_MAP["resolved"];
-      const patchQuoteTags = (patchChain ?? []).map((patch) => [
-        "q",
-        patch.event.id,
-        "",
-        patch.pubkey,
-      ]);
-
-      const signedStatus = await StatusChangeFactory.create(
-        statusKind,
-        pr.rootEvent.id,
-        pr.repoCoords,
-        pr.pubkey,
-        account.pubkey,
-      )
-        .modifyPublicTags((tags) => [
-          ...tags,
-          ["merge-commit", mergeCommitHash],
-          ["r", mergeCommitHash],
-          ...patchQuoteTags,
-        ])
-        .sign(account.signer);
+      const signedStatus = await signMergedStatus({
+        signer: account.signer,
+        signerPubkey: account.pubkey,
+        rootEventId: pr.rootEvent.id,
+        repoCoords: pr.repoCoords,
+        rootAuthorPubkey: pr.pubkey,
+        mergeCommitHash,
+        patchEventIds,
+      });
 
       await outboxStore.publish(signedStatus, [
         `outbox:${account.pubkey}`,
@@ -812,7 +515,7 @@ export function MergePanel({
       ]);
       eventStore.add(signedStatus);
     },
-    [account, patchChain, pr, repo.allCoordinates],
+    [account, patchEventIds, pr, repo.allCoordinates],
   );
 
   const handleMarkDetectedMerged = useCallback(async () => {
@@ -830,63 +533,15 @@ export function MergePanel({
         description: `Detected merge commit ${detectedMergeCommit.hash.slice(0, 8)} and published the missing merged status.`,
       });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Could not publish merged status";
-      setMergeStep("failed");
-      setMergeError(message);
-      toast({
-        title: "Could not mark as merged",
-        description: message,
-        variant: "destructive",
-      });
-    }
-  }, [account, detectedMergeCommit, publishMergedStatus, toast]);
-
-  // ── Push helper ──────────────────────────────────────────────────────────
-
-  const pushObjects = useCallback(
-    async (
-      allObjects: PackableObject[],
-      refUpdate: RefUpdate,
-    ): Promise<PushDeliverySummary> => {
-      // Safety guard at the single push choke point: never advance a branch to
-      // a tip that does not descend from its current tip. A non-fast-forward
-      // push orphans commits already on the branch — the disaster an incorrect
-      // merge base can cause. Throw before sending anything to the git server.
-      assertFastForwardSafe(allObjects, refUpdate.oldHash, refUpdate.newHash);
-
-      const packfile = await createPackfile(allObjects);
-      const outcomes = await Promise.all(
-        repo.graspCloneUrls.map((cloneUrl) =>
-          pushToGraspServer(cloneUrl, refUpdate, packfile),
-        ),
+      failMerge(
+        err,
+        "Could not mark as merged",
+        "Could not publish merged status",
       );
-      const successCount = outcomes.filter((outcome) => outcome.ok).length;
-      const summary: PushDeliverySummary = {
-        outcomes,
-        successCount,
-        totalCount: outcomes.length,
-      };
+    }
+  }, [account, detectedMergeCommit, publishMergedStatus, failMerge, toast]);
 
-      if (successCount === 0) {
-        const reasons = outcomes
-          .map(
-            (outcome) =>
-              `${formatCloneUrlHost(outcome.cloneUrl)}: ${outcome.message}`,
-          )
-          .join("; ");
-        throw new Error(
-          `Push failed to all Grasp servers. ${reasons}. ` +
-            "The state event will expire from purgatory in 30 minutes.",
-        );
-      }
-
-      return summary;
-    },
-    [repo.graspCloneUrls],
-  );
-
-  // ── Merge orchestration (merge strategy) ─────────────────────────────────
+  // ── Merge orchestration (patch-type merge strategy) ─────────────────────
 
   const handleMerge = useCallback(async () => {
     if (
@@ -898,44 +553,15 @@ export function MergePanel({
       return;
     }
 
-    setMergeStep("building");
-    setMergeError(null);
-    setPushDelivery(null);
+    beginMerge();
 
     try {
-      let pushSummary: PushDeliverySummary | null = null;
-      // ── Build the committer identity for the merge commit ──────────────
-      const committerName =
-        profile?.displayName || profile?.name || "Anonymous";
-      const committerEmail =
-        profile?.nip05 ?? `${nip19.npubEncode(account.pubkey)}@nostr`;
+      const committer = buildCommitterNow();
+      if (!committer) return;
 
-      const now = Math.floor(Date.now() / 1000);
-      const tzOffset = new Date().getTimezoneOffset();
-      const tzSign = tzOffset <= 0 ? "+" : "-";
-      const tzHours = Math.floor(Math.abs(tzOffset) / 60)
-        .toString()
-        .padStart(2, "0");
-      const tzMins = (Math.abs(tzOffset) % 60).toString().padStart(2, "0");
-      const timezone = `${tzSign}${tzHours}${tzMins}`;
-
-      const committer: CommitPerson = {
-        name: committerName,
-        email: committerEmail,
-        timestamp: now,
-        timezone,
-      };
-
-      const prNevent = nip19.neventEncode({
-        id: pr.rootEvent.id,
-        author: pr.pubkey,
-        relays: repo.relays.slice(0, 3),
-      });
-
-      // Cover note takes precedence over the PR body in the merge commit
-      // message (recorded under different headings — see buildMergeCommitMessage).
-      const coverNote = pr.coverNote?.content || undefined;
-      const prDescription = pr.body || undefined;
+      const { transports, getPushSummary } = createMergeTransports(
+        account.pubkey,
+      );
 
       const { mergeCommit } = await performMerge({
         signer: account.signer,
@@ -946,72 +572,46 @@ export function MergePanel({
         dTag: repo.dTag,
         defaultBranchName,
         defaultBranchHead,
+        currentStateEvent,
         repoCoords: pr.repoCoords,
         rootEventId: pr.rootEvent.id,
         rootAuthorPubkey: pr.pubkey,
         subject: pr.currentSubject || pr.originalSubject,
-        prNevent,
+        prNevent: buildPRNevent(pr.rootEvent.id, pr.pubkey, repo.relays),
         rootAuthorName,
-        coverNote,
-        prDescription,
+        // Cover note takes precedence over the PR body in the merge commit
+        // message (recorded under different headings — see buildMergeCommitMessage).
+        coverNote: pr.coverNote?.content || undefined,
+        prDescription: pr.body || undefined,
         committer,
-        patchEventIds: (patchChain ?? []).map((patch) => ({
-          id: patch.event.id,
-          pubkey: patch.pubkey,
-        })),
-        publishStateToGrasp: (state) =>
-          publishToGraspRelays(state, graspRelayUrls),
-        pushObjects: async (objects, refUpdate) => {
-          pushSummary = await pushObjects(objects, refUpdate);
-          setPushDelivery(pushSummary);
-          onSuccessfulPush?.();
-        },
-        publishStatusBroadly: (status) =>
-          outboxStore.publish(status, [
-            `outbox:${account.pubkey}`,
-            ...repo.allCoordinates,
-            ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
-          ]),
-        broadcastStateBroadly: (state) =>
-          outboxStore.publish(state, [
-            `outbox:${account.pubkey}`,
-            ...repo.allCoordinates,
-            "fallback-relays",
-          ]),
-        onEvent: (event) => eventStore.add(event),
-        onStep: (step) => setMergeStep(step),
+        patchEventIds,
+        ...transports,
       });
 
+      const summary = getPushSummary();
       toast({
         title: "Patch merged",
-        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}. ${pushSummary ? summarizePushDelivery(pushSummary) : ""}`,
+        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}.${summary ? ` ${summarizePushDelivery(summary)}` : ""}`,
       });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Merge failed unexpectedly";
-      setMergeStep("failed");
-      setMergeError(message);
-      toast({
-        title: "Merge failed",
-        description: message,
-        variant: "destructive",
-      });
+      failMerge(err, "Merge failed", "Merge failed unexpectedly");
     }
   }, [
     account,
     mergeability.buildResult,
     defaultBranchHead,
+    currentStateEvent,
     defaultBranchName,
     gitPool,
-    profile,
     pr,
-    patchChain,
-    pushObjects,
+    patchEventIds,
     repo,
-    graspRelayUrls,
-    toast,
     rootAuthorName,
-    onSuccessfulPush,
+    beginMerge,
+    buildCommitterNow,
+    createMergeTransports,
+    failMerge,
+    toast,
   ]);
 
   // ── Apply-to-tip orchestration ────────────────────────────────────────────
@@ -1026,207 +626,121 @@ export function MergePanel({
       return;
     }
 
-    setMergeStep("building");
-    setMergeError(null);
-    setPushDelivery(null);
+    beginMerge();
 
     try {
-      const { objects, newTipCommitHash } = mergeability.applyResult;
-
-      // Publish state event pointing to the new tip
-      const signedState = await RepoStateFactory.create(
-        repo.dTag,
-        newTipCommitHash,
-        defaultBranchName,
-      ).sign(account.signer);
-
-      setMergeStep("publishing-state");
-      await publishToGraspRelays(signedState, graspRelayUrls);
-      eventStore.add(signedState);
-
-      // Push the linear commits
-      setMergeStep("pushing");
-      const pushSummary = await pushObjects(objects, {
-        oldHash: defaultBranchHead,
-        newHash: newTipCommitHash,
-        refName: defaultBranchRef,
-      });
-      setPushDelivery(pushSummary);
-      onSuccessfulPush?.();
-
-      // Publish status + broadcast
-      setMergeStep("publishing-status");
-
-      const statusKind = STATUS_KIND_MAP["resolved"];
-      const patchQuoteTags = (patchChain ?? []).map((patch) => [
-        "q",
-        patch.event.id,
-        "",
-        patch.pubkey,
-      ]);
-
-      const signedStatus = await StatusChangeFactory.create(
-        statusKind,
-        pr.rootEvent.id,
-        pr.repoCoords,
-        pr.pubkey,
+      const { transports, getPushSummary } = createMergeTransports(
         account.pubkey,
-      )
-        .modifyPublicTags((tags) => [
-          ...tags,
-          ["merge-commit", newTipCommitHash],
-          ["r", newTipCommitHash],
-          ...patchQuoteTags,
-        ])
-        .sign(account.signer);
+      );
 
-      await outboxStore.publish(signedStatus, [
-        `outbox:${account.pubkey}`,
-        ...repo.allCoordinates,
-        ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
-      ]);
-      eventStore.add(signedStatus);
+      const { newTipCommitHash } = await performApplyToTip({
+        signer: account.signer,
+        signerPubkey: account.pubkey,
+        objects: mergeability.applyResult.objects,
+        newTipCommitHash: mergeability.applyResult.newTipCommitHash,
+        dTag: repo.dTag,
+        defaultBranchName,
+        defaultBranchHead,
+        currentStateEvent,
+        repoCoords: pr.repoCoords,
+        rootEventId: pr.rootEvent.id,
+        rootAuthorPubkey: pr.pubkey,
+        patchEventIds,
+        ...transports,
+      });
 
-      setMergeStep("broadcasting-state");
-      await outboxStore.publish(signedState, [
-        `outbox:${account.pubkey}`,
-        ...repo.allCoordinates,
-        "fallback-relays",
-      ]);
-
-      setMergeStep("done");
+      const summary = getPushSummary();
       const patchCount = patchChain?.length ?? 0;
       toast({
         title: "Patch applied",
-        description: `${patchCount} commit${patchCount !== 1 ? "s" : ""} applied to ${defaultBranchName} (tip: ${newTipCommitHash.slice(0, 8)}). ${summarizePushDelivery(pushSummary)}`,
+        description: `${patchCount} commit${patchCount !== 1 ? "s" : ""} applied to ${defaultBranchName} (tip: ${newTipCommitHash.slice(0, 8)}).${summary ? ` ${summarizePushDelivery(summary)}` : ""}`,
       });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Apply failed unexpectedly";
-      setMergeStep("failed");
-      setMergeError(message);
-      toast({
-        title: "Apply failed",
-        description: message,
-        variant: "destructive",
-      });
+      failMerge(err, "Apply failed", "Apply failed unexpectedly");
     }
   }, [
     account,
     mergeability.applyResult,
     defaultBranchHead,
+    currentStateEvent,
     defaultBranchName,
-    defaultBranchRef,
     gitPool,
     pr,
     patchChain,
-    pushObjects,
+    patchEventIds,
     repo,
-    graspRelayUrls,
+    beginMerge,
+    createMergeTransports,
+    failMerge,
     toast,
-    onSuccessfulPush,
   ]);
 
   // ── PR merge orchestration ────────────────────────────────────────────────
 
   const handlePRMerge = useCallback(async () => {
-    if (!account || !prMergeability.result || !defaultBranchHead) {
+    if (
+      !account ||
+      !prMergeability.result ||
+      !defaultBranchHead ||
+      !gitPool ||
+      !pr.tip.commitId
+    ) {
       return;
     }
 
-    setMergeStep("building");
-    setMergeError(null);
-    setPushDelivery(null);
+    beginMerge();
 
     try {
-      const { mergeCommitObj } = prMergeability.result;
-
-      // ── Step 2+3: Publish state + push ────────────────────────────────
-      const signedState = await RepoStateFactory.create(
-        repo.dTag,
-        mergeCommitObj.hash,
-        defaultBranchName,
-      ).sign(account.signer);
-
-      setMergeStep("publishing-state");
-      await publishToGraspRelays(signedState, graspRelayUrls);
-      eventStore.add(signedState);
-
-      setMergeStep("pushing");
-      // Push the merge commit PLUS any new objects a three-way merge produced
-      // (rebuilt trees + auto-merged blobs). For the fast path extraObjects is
-      // empty and the PR tip's tree already exists on the server.
-      const pushSummary = await pushObjects(
-        [mergeCommitObj, ...prMergeability.result.extraObjects],
-        {
-          oldHash: defaultBranchHead,
-          newHash: mergeCommitObj.hash,
-          refName: defaultBranchRef,
-        },
-      );
-      setPushDelivery(pushSummary);
-      onSuccessfulPush?.();
-
-      // ── Step 4+5: Status + broadcast ──────────────────────────────────
-      setMergeStep("publishing-status");
-
-      const statusKind = STATUS_KIND_MAP["resolved"];
-      const signedStatus = await StatusChangeFactory.create(
-        statusKind,
-        pr.rootEvent.id,
-        pr.repoCoords,
-        pr.pubkey,
+      const { transports, getPushSummary } = createMergeTransports(
         account.pubkey,
-      )
-        .modifyPublicTags((tags) => [
-          ...tags,
-          ["merge-commit", mergeCommitObj.hash],
-          ["r", mergeCommitObj.hash],
-        ])
-        .sign(account.signer);
+      );
 
-      await outboxStore.publish(signedStatus, [
-        `outbox:${account.pubkey}`,
-        ...repo.allCoordinates,
-        ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
-      ]);
-      eventStore.add(signedStatus);
+      const { mergeCommit } = await performPRMerge({
+        signer: account.signer,
+        signerPubkey: account.pubkey,
+        mergeCommitObj: prMergeability.result.mergeCommitObj,
+        prTipCommitHash: pr.tip.commitId,
+        mergeBase: prMergeability.result.mergeBase,
+        extraObjects: prMergeability.result.extraObjects,
+        dTag: repo.dTag,
+        defaultBranchName,
+        defaultBranchHead,
+        currentStateEvent,
+        repoCoords: pr.repoCoords,
+        rootEventId: pr.rootEvent.id,
+        rootAuthorPubkey: pr.pubkey,
+        fetchBranchObjects: (tipCommitHash, stopAtCommitHash) =>
+          gitPool.getPackableObjectsForCommitRange(
+            tipCommitHash,
+            stopAtCommitHash,
+            new AbortController().signal,
+            effectiveCloneUrls,
+          ),
+        ...transports,
+      });
 
-      setMergeStep("broadcasting-state");
-      await outboxStore.publish(signedState, [
-        `outbox:${account.pubkey}`,
-        ...repo.allCoordinates,
-        "fallback-relays",
-      ]);
-
-      setMergeStep("done");
+      const summary = getPushSummary();
       toast({
         title: "PR merged",
-        description: `Merge commit ${mergeCommitObj.hash.slice(0, 8)} pushed to ${defaultBranchName}. ${summarizePushDelivery(pushSummary)}`,
+        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}.${summary ? ` ${summarizePushDelivery(summary)}` : ""}`,
       });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Merge failed unexpectedly";
-      setMergeStep("failed");
-      setMergeError(message);
-      toast({
-        title: "Merge failed",
-        description: message,
-        variant: "destructive",
-      });
+      failMerge(err, "Merge failed", "Merge failed unexpectedly");
     }
   }, [
     account,
     prMergeability.result,
     defaultBranchHead,
+    currentStateEvent,
     defaultBranchName,
-    defaultBranchRef,
+    gitPool,
+    effectiveCloneUrls,
     pr,
-    pushObjects,
     repo,
-    graspRelayUrls,
+    beginMerge,
+    createMergeTransports,
+    failMerge,
     toast,
-    onSuccessfulPush,
   ]);
 
   // ── Render ──────────────────────────────────────────────────────────────
@@ -1554,18 +1068,13 @@ export function MergePanel({
                           variant="outline"
                           size="sm"
                           className="h-7 border-amber-500/40 px-2 text-xs text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
-                          onClick={() =>
-                            setDetectedMergeExtraLookback(
-                              (n) => n + DETECTED_MERGE_HISTORY_LOOKBACK_STEP,
-                            )
-                          }
+                          onClick={lookBackFurther}
                         >
                           Look back further
                         </Button>
                         <span className="text-[10px] text-muted-foreground">
                           Next scan checks up to{" "}
-                          {detectedMergeScanResult.maxTotal +
-                            DETECTED_MERGE_HISTORY_LOOKBACK_STEP}{" "}
+                          {detectedMergeScanResult.maxTotal + lookbackStep}{" "}
                           commits.
                         </span>
                       </div>

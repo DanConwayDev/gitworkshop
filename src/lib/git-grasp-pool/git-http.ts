@@ -31,6 +31,7 @@ import {
   type InfoRefsUploadPackResponse,
   type ParsedObject,
 } from "@/lib/vendored/git-natural-api";
+import type { PackableObject } from "@/lib/git-packfile";
 import type { CorsProxyManager } from "./cors-proxy";
 import type { GitObjectCache, RawObjectsEntry } from "./cache";
 import { FULL_NEST_LIMIT } from "./cache";
@@ -207,6 +208,13 @@ function isBigBatchError(err: unknown): boolean {
     (err.constructor.name === "BigBatchError" ||
       err.message.includes("decompress too much data"))
   );
+}
+
+function parsedObjectToPackable(obj: ParsedObject): PackableObject | null {
+  if (obj.type === 1) return { type: "commit", data: obj.data, hash: obj.hash };
+  if (obj.type === 2) return { type: "tree", data: obj.data, hash: obj.hash };
+  if (obj.type === 3) return { type: "blob", data: obj.data, hash: obj.hash };
+  return null;
 }
 
 /** How many commits to request per batch when fetching commit history. */
@@ -1121,6 +1129,53 @@ export class GitHttpClient {
       const commit = commits[0];
       this.cache.putCommit(commit);
       return commit;
+    } catch {
+      if (signal.aborted) return null;
+      return null;
+    }
+  }
+
+  /**
+   * Fetch raw, packable objects reachable from a commit.
+   *
+   * Browser PR merges cannot assume the target Grasp server already has the PR
+   * author's fork commits. This returns full commit/tree/blob objects that can
+   * be included in the receive-pack request with the new merge commit.
+   */
+  async fetchPackableObjects(
+    url: string,
+    commitHash: string,
+    maxCommits: number,
+    signal: AbortSignal,
+  ): Promise<PackableObject[] | null> {
+    const effectiveUrl = this.cors.resolveUrl(url);
+    const serverCaps = await this.getServerCaps(url, signal);
+    if (signal.aborted) return null;
+
+    try {
+      const caps = selectCapabilities(serverCaps);
+      const want = createWantRequest(commitHash, caps, maxCommits);
+      const result = await fetchPackfile(effectiveUrl, want);
+      if (signal.aborted) return null;
+
+      const objects: PackableObject[] = [];
+      for (const obj of result.objects.values()) {
+        const packable = parsedObjectToPackable(obj);
+        if (!packable) continue;
+
+        objects.push(packable);
+        if (packable.type === "blob") {
+          this.cache.putBlob(packable.hash, packable.data);
+        } else if (packable.type === "commit") {
+          try {
+            this.cache.putCommit(parseCommit(packable.data, packable.hash));
+          } catch {
+            // Cache warming is best-effort; the raw object is still pushable.
+          }
+        }
+      }
+
+      return objects;
     } catch {
       if (signal.aborted) return null;
       return null;

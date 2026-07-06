@@ -279,6 +279,8 @@ describe("parseReportStatus", () => {
     const result = parseReportStatus(input);
 
     expect(result.unpackOk).toBe(true);
+    expect(result.unpackStatus).toBe("ok");
+    expect(result.serverError).toBeUndefined();
     expect(result.refResults).toEqual([
       { refName: "refs/heads/main", ok: true },
     ]);
@@ -291,6 +293,41 @@ describe("parseReportStatus", () => {
     const result = parseReportStatus(input);
 
     expect(result.unpackOk).toBe(false);
+    expect(result.unpackStatus).toBe("error - bad pack header");
+    expect(result.refResults).toEqual([]);
+  });
+
+  it("captures the real unpack status text from a receive-pack failure", () => {
+    // Exact shape produced by stock `git receive-pack` when the pack itself
+    // is malformed (verified against git receive-pack --stateless-rpc).
+    const input =
+      pktLineEncode("unpack unpack-objects abnormal exit\n") +
+      pktLineEncode("ng refs/heads/main unpacker error\n") +
+      pktLineFlush();
+
+    const result = parseReportStatus(input);
+
+    expect(result.unpackOk).toBe(false);
+    expect(result.unpackStatus).toBe("unpack-objects abnormal exit");
+    expect(result.refResults).toEqual([
+      { refName: "refs/heads/main", ok: false, reason: "unpacker error" },
+    ]);
+  });
+
+  it("captures an ERR pkt-line application-level rejection", () => {
+    // Grasp servers (ngit-grasp) reject unauthorized pushes with HTTP 200 and
+    // an `ERR <reason>` pkt-line instead of a report-status.
+    const input = pktLineEncode(
+      "ERR authorisation failed: no matching state event in purgatory\n",
+    );
+
+    const result = parseReportStatus(input);
+
+    expect(result.unpackOk).toBe(false);
+    expect(result.unpackStatus).toBeUndefined();
+    expect(result.serverError).toBe(
+      "authorisation failed: no matching state event in purgatory",
+    );
     expect(result.refResults).toEqual([]);
   });
 

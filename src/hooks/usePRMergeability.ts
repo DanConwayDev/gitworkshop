@@ -21,7 +21,7 @@
  *
  * The pre-built merge commit object plus any NEW objects the three-way merge
  * produced (rebuilt trees, auto-merged blobs) are returned so the merge button
- * can push immediately without waiting.
+ * can push them with the PR branch objects fetched from the author's clone URL.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -43,11 +43,12 @@ export interface PRMergeResult {
   mergeCommitObj: PackableObject;
   /** The merge commit hash */
   mergeCommitHash: string;
+  /** The computed merge base used for the merge. */
+  mergeBase: string;
   /**
    * NEW git objects (rebuilt trees + auto-merged blobs) produced by a
    * three-way merge that MUST be pushed alongside the merge commit. Empty for
-   * the fast path (PR tip tree adopted verbatim — those objects already exist
-   * on the server).
+   * the fast path (PR tip tree adopted verbatim).
    */
   extraObjects: PackableObject[];
 }
@@ -224,7 +225,8 @@ export function usePRMergeability(
       // Decide the merge tree.
       //   Fast path: the default branch has NOT advanced past the merge base,
       //   so the PR tip's tree already incorporates everything on the branch —
-      //   adopt it verbatim (its objects already exist on the server).
+      //   adopt it verbatim. The push path still includes PR branch objects,
+      //   because forked PR commits may not exist on the target server.
       //   Diverged: perform a real three-way merge so changes made on the
       //   default branch since the base are preserved.
       let mergeTreeHash = tipData.commit.tree;
@@ -284,6 +286,7 @@ export function usePRMergeability(
       setResult({
         mergeCommitObj,
         mergeCommitHash: mergeCommitObj.hash,
+        mergeBase,
         extraObjects,
       });
       setStatus("ready");

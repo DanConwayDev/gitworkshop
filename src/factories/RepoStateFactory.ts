@@ -16,10 +16,18 @@
  * ```
  */
 
-import { blankEventTemplate, EventFactory } from "applesauce-core/factories";
+import {
+  blankEventTemplate,
+  EventFactory,
+  toEventTemplate,
+} from "applesauce-core/factories";
 import { includeSingletonTag } from "applesauce-core/operations/tags";
 import { REPO_STATE_KIND } from "@/lib/nip34";
-import type { KnownEventTemplate } from "applesauce-core/helpers/event";
+import type {
+  KnownEvent,
+  KnownEventTemplate,
+} from "applesauce-core/helpers/event";
+import type { NostrEvent } from "nostr-tools";
 
 type RepoStateTemplate = KnownEventTemplate<typeof REPO_STATE_KIND>;
 
@@ -51,5 +59,41 @@ export class RepoStateFactory extends EventFactory<
           ["HEAD", `ref: refs/heads/${branchName}`],
         ])
     );
+  }
+
+  /**
+   * Create an updated state event from an existing repository state, preserving
+   * every declared branch/tag and replacing only the target branch plus HEAD.
+   *
+   * Existing repositories need the full post-push ref set in kind:30618; Grasp
+   * rejects pushes whose state event omits branches/tags that will still exist.
+   * Use this for merges and other branch updates. `create` remains appropriate
+   * for brand-new single-branch repositories.
+   */
+  static updateBranch(
+    identifier: string,
+    existingState: NostrEvent | null | undefined,
+    commitHash: string,
+    branchName: string = "main",
+  ): RepoStateFactory {
+    const branchRef = `refs/heads/${branchName}`;
+
+    return new RepoStateFactory((resolve) => {
+      if (existingState?.kind === REPO_STATE_KIND) {
+        resolve(
+          toEventTemplate(existingState as KnownEvent<typeof REPO_STATE_KIND>),
+        );
+      } else {
+        resolve(blankEventTemplate(REPO_STATE_KIND));
+      }
+    })
+      .chain(includeSingletonTag(["d", identifier], true))
+      .modifyPublicTags((tags) => [
+        ...tags.filter(
+          ([tagName]) => tagName !== branchRef && tagName !== "HEAD",
+        ),
+        [branchRef, commitHash],
+        ["HEAD", `ref: ${branchRef}`],
+      ]);
   }
 }

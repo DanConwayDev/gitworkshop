@@ -51,6 +51,22 @@ export interface RefResult {
 export interface PushResult {
   /** Whether the overall unpack succeeded. */
   unpackOk: boolean;
+  /**
+   * The raw text after "unpack " in the report-status response (e.g. "ok" or
+   * "unpack-objects abnormal exit"). Undefined when the response contained no
+   * unpack line at all — e.g. an application-level `ERR` rejection.
+   */
+  unpackStatus?: string;
+  /**
+   * Application-level rejection text from an `ERR <message>` pkt-line.
+   *
+   * Grasp servers (ngit-grasp) return HTTP 200 with an ERR pkt-line instead
+   * of a report-status when a push is rejected before git-receive-pack runs —
+   * most importantly "authorisation failed: <reason>" when the signed state
+   * event is missing from purgatory. Surfacing this verbatim is the only way
+   * to distinguish an authorization rejection from a genuine unpack failure.
+   */
+  serverError?: string;
   /** Per-ref results. */
   refResults: RefResult[];
   /** Raw response text for debugging. */
@@ -309,10 +325,18 @@ export function parseReportStatus(responseText: string): PushResult {
 
     const trimmed = line.replace(/\n$/, "");
 
+    // Application-level rejection: "ERR <message>" (sent instead of a
+    // report-status by Grasp servers, e.g. for authorization failures).
+    if (trimmed.startsWith("ERR ")) {
+      result.serverError = trimmed.substring(4).trim();
+      continue;
+    }
+
     // Unpack status
     if (trimmed.startsWith("unpack ")) {
       const status = trimmed.substring(7);
       result.unpackOk = status === "ok";
+      result.unpackStatus = status;
       continue;
     }
 

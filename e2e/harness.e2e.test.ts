@@ -8,6 +8,8 @@
  *   3. RelayClient — connect, publish an event, read it back via REQ.
  *   4. seedRepo() — announce → state → push lands a real commit on the
  *      grasp git server, and the announcement is queryable from the relay.
+ *   5. multi-server helpers — seed two mirrors, advance one, and publish a
+ *      tag to one side so future merge suites can assert lagging fixtures.
  *
  * When it passes, the harness is known-good and real feature tests (e.g. the
  * Merge button) can build on `seedRepo`. The whole suite skips cleanly if no
@@ -20,7 +22,10 @@ import {
   GraspServer,
   RelayClient,
   TestSigner,
+  advanceBranch,
   seedRepo,
+  seedMultiServerRepo,
+  seedTag,
   graspBinaryAvailable,
   REPO_KIND,
   REPO_STATE_KIND,
@@ -109,5 +114,77 @@ describeIfGrasp("e2e harness — smoke test", () => {
     // The pushed ref is visible on the git server's receive-pack advertisement.
     const refs = await getReceivePackRefs(repo.cloneUrl);
     expect(refs.refs[`refs/heads/${repo.branch}`]).toBe(repo.headCommit);
+  });
+
+  it("step 5: multi-server fixtures can manufacture a lagging mirror and state-only tag", async () => {
+    const serverB = await GraspServer.start({ role: "harness-b" });
+    const relayB = await RelayClient.connect(serverB.relayUrl);
+
+    try {
+      const maintainer = new TestSigner();
+      const repo = await seedMultiServerRepo(
+        [server, serverB],
+        [relay, relayB],
+        maintainer,
+        {
+          identifier: "harness-multi-smoke",
+          name: "Harness Multi Smoke",
+          files: { "README.md": "# harness multi smoke\n" },
+        },
+      );
+
+      expect(repo.cloneUrls).toEqual([
+        server.cloneUrl(maintainer.npub, repo.identifier),
+        serverB.cloneUrl(maintainer.npub, repo.identifier),
+      ]);
+
+      const advanced = await advanceBranch(repo, maintainer, {
+        pushTo: [server],
+        publishStateTo: [relay],
+        path: "A_ONLY.md",
+        content: "server A advanced\n",
+        message: "advance only server A",
+      });
+
+      const refsAAfterAdvance = await getReceivePackRefs(repo.cloneUrls[0]);
+      const refsBAfterAdvance = await getReceivePackRefs(repo.cloneUrls[1]);
+      expect(refsAAfterAdvance.refs[`refs/heads/${repo.branch}`]).toBe(
+        advanced.commit,
+      );
+      expect(refsBAfterAdvance.refs[`refs/heads/${repo.branch}`]).toBe(
+        repo.headCommit,
+      );
+
+      const tagged = await seedTag(advanced.repo, maintainer, {
+        name: "v0.1.0",
+        includeInStateTo: [relay],
+      });
+
+      const statesA = await relay.query([
+        {
+          kinds: [REPO_STATE_KIND],
+          authors: [maintainer.pubkey],
+          "#d": [repo.identifier],
+        },
+      ]);
+      const statesB = await relayB.query([
+        {
+          kinds: [REPO_STATE_KIND],
+          authors: [maintainer.pubkey],
+          "#d": [repo.identifier],
+        },
+      ]);
+      const taggedStateA = statesA.find(
+        (event) => event.id === tagged.state.id,
+      );
+      expect(taggedStateA?.tags).toContainEqual([
+        tagged.refName,
+        advanced.commit,
+      ]);
+      expect(statesB.map((event) => event.id)).not.toContain(tagged.state.id);
+    } finally {
+      relayB.close();
+      await serverB.stop();
+    }
   });
 });

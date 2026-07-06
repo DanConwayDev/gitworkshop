@@ -22,10 +22,11 @@
  *     and point at the new merge commit.
  *
  * `performMerge` is the plain-module extraction of `MergePanel.handleMerge`
- * (see `src/lib/perform-merge.ts`); the React component now calls the same
- * function, so this test covers the production path. Transport is injected so
- * we publish ONLY to the local grasp relay (via `RelayClient`) and push ONLY to
- * the local grasp git server — never `@/services/nostr`.
+ * (see `src/lib/git-grasp-pool/merge.ts`); the React component now calls the
+ * same function, so this test covers the production path. Test transport wiring
+ * mirrors MergePanel: state/status publish ONLY to the local grasp relay (via
+ * `RelayClient`) and `pushObjects` goes through `pool.pushRefUpdate` so the
+ * production grasp fan-out path is exercised — never `@/services/nostr`.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -37,27 +38,28 @@ import {
   TestSigner,
   seedRepo,
   seedPatchPR,
+  seedKindPR,
+  makePoolTransports,
   graspBinaryAvailable,
   REPO_STATE_KIND,
   type SeededRepo,
 } from "./harness";
 import { Patch } from "@/casts/Patch";
+import { PR } from "@/casts/PR";
 import {
+  createMergeCommitObject,
   buildPatchChainObjects,
   type PatchChainBuildResult,
 } from "@/lib/patch-merge";
-import { performMerge } from "@/lib/perform-merge";
-import { GitGraspPool } from "@/lib/git-grasp-pool";
-import { createPackfile } from "@/lib/git-packfile";
 import {
-  pushToGitServer,
-  getReceivePackRefs,
-  ZERO_HASH,
-  type RefUpdate,
-} from "@/lib/git-push";
-import type { PackableObject } from "@/lib/git-packfile";
+  performMerge,
+  buildPRNevent,
+  performPRMerge,
+} from "@/lib/git-grasp-pool";
+import { GitGraspPool } from "@/lib/git-grasp-pool";
+import { getReceivePackRefs, ZERO_HASH } from "@/lib/git-push";
 import type { CommitPerson } from "@/lib/git-objects";
-import { STATUS_RESOLVED } from "@/lib/nip34";
+import { PR_KIND, STATUS_RESOLVED } from "@/lib/nip34";
 
 const describeIfGrasp = graspBinaryAvailable() ? describe : describe.skip;
 
@@ -146,7 +148,12 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       timezone: "+0000",
     };
 
-    const collectedEvents: NostrEvent[] = [];
+    const transports = makePoolTransports(
+      pool,
+      [relay],
+      [repo.cloneUrl],
+      repo.state,
+    );
 
     const result = await performMerge({
       signer: maintainer,
@@ -157,6 +164,7 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       dTag: repo.identifier,
       defaultBranchName: repo.branch,
       defaultBranchHead: repo.headCommit,
+      currentStateEvent: repo.state,
       repoCoords: [repo.coordinate],
       rootEventId: seeded.patch.id,
       rootAuthorPubkey: contributor.pubkey,
@@ -164,36 +172,9 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       prNevent: "nevent1test",
       committer,
       patchEventIds: [{ id: seeded.patch.id, pubkey: contributor.pubkey }],
-      // Publish state to the grasp relay ONLY (purgatory authorization).
-      publishStateToGrasp: async (state) => {
-        await relay.publish(state);
-      },
-      // Push the packfile to the grasp git server.
-      pushObjects: async (objects: PackableObject[], refUpdate: RefUpdate) => {
-        const packfile = await createPackfile(objects);
-        const pushResult = await pushToGitServer(
-          repo.cloneUrl,
-          [refUpdate],
-          packfile,
-        );
-        if (!pushResult.unpackOk || !pushResult.refResults.every((r) => r.ok)) {
-          throw new Error(
-            `push failed (unpackOk=${pushResult.unpackOk}): ` +
-              pushResult.refResults
-                .map((r) => `${r.refName}=${r.ok ? "ok" : r.reason}`)
-                .join(", "),
-          );
-        }
-      },
-      // "Broadcast" steps go to the same single relay in the test.
-      publishStatusBroadly: async (status) => {
-        await relay.publish(status);
-      },
-      broadcastStateBroadly: async () => {
-        // already published to the only relay we have; no-op
-      },
-      onEvent: (e) => collectedEvents.push(e),
+      ...transports.transports,
     });
+    expect(transports.getPushSummary()?.successCount).toBe(1);
 
     // ── 4. Assert: merge commit is the new tip on the git server ─────────
     const refs = await getReceivePackRefs(repo.cloneUrl);
@@ -205,16 +186,28 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
     expect(result.mergeCommit.hash).not.toBe(seeded.commit);
 
     // ── 5. Assert: the kind:30618 state on the relay points at the merge ──
-    const states = await relay.query([
-      {
-        kinds: [REPO_STATE_KIND],
-        authors: [maintainer.pubkey],
-        "#d": [repo.identifier],
-      },
-    ]);
-    const headRefTag = states
-      .flatMap((s) => s.tags)
-      .find(([t]) => t === `refs/heads/${repo.branch}`);
+    // The state event is accepted into purgatory first and only promoted to
+    // the queryable relay DB after the push materialises the refs — that
+    // promotion is asynchronous, so poll briefly instead of asserting on the
+    // first query. The relay may also still return the seed state alongside
+    // the merged state and makes no ordering guarantee, so assert against the
+    // exact state event performMerge published.
+    let mergedState: NostrEvent | undefined;
+    for (let attempt = 0; attempt < 20 && !mergedState; attempt++) {
+      const states = await relay.query([
+        {
+          kinds: [REPO_STATE_KIND],
+          authors: [maintainer.pubkey],
+          "#d": [repo.identifier],
+        },
+      ]);
+      mergedState = states.find((s) => s.id === result.state.id);
+      if (!mergedState) await new Promise((r) => setTimeout(r, 250));
+    }
+    expect(mergedState).toBeDefined();
+    const headRefTag = mergedState?.tags.find(
+      ([t]) => t === `refs/heads/${repo.branch}`,
+    );
     expect(headRefTag?.[1]).toBe(result.mergeCommit.hash);
 
     // ── 6. Assert: the kind:1631 merged status is queryable ──────────────
@@ -228,11 +221,172 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
     expect(mergeCommitTag?.[1]).toBe(result.mergeCommit.hash);
 
     // onEvent fired for state + status.
-    expect(collectedEvents.map((e) => e.id)).toEqual(
+    expect(transports.events.map((e) => e.id)).toEqual(
       expect.arrayContaining([result.state.id, result.status.id]),
     );
 
     // sanity: ZERO_HASH constant is the all-zero ref (documents the push contract)
     expect(ZERO_HASH).toMatch(/^0{40}$/);
+  });
+
+  it("seeds a kind:1618 PR branch, builds the merge commit, then merges it to the branch tip", async () => {
+    const prRepo = await seedRepo(server, relay, maintainer, {
+      identifier: "merge-kind-pr-repo",
+      name: "Merge Kind PR Repo",
+      files: { "README.md": "# PR repo\n\nbase line\n" },
+    });
+    const prPool = new GitGraspPool({
+      cloneUrls: [prRepo.cloneUrl],
+      corsProxyBase: null,
+    });
+
+    try {
+      // ── 1. Contributor pushes a branch and publishes a kind:1618 PR ──────
+      const seeded = await seedKindPR(prRepo, relay, maintainer, contributor, {
+        branch: "pr-kind-happy-path",
+        path: "PR-FEATURE.md",
+        content: "# PR Feature\n\nbranch-backed change\n",
+        subject: "Add PR-FEATURE.md",
+        body: "Exercises the kind:1618 PR merge path.",
+      });
+
+      const prs = await relay.query([
+        { kinds: [PR_KIND], authors: [contributor.pubkey] },
+      ]);
+      expect(prs.map((e) => e.id)).toContain(seeded.pr.id);
+
+      const store = new EventStore();
+      const prCast = new PR(seeded.pr, store);
+      expect(prCast.subject).toBe("Add PR-FEATURE.md");
+      expect(prCast.tipCommitId).toBe(seeded.commit);
+      expect(prCast.mergeBase).toBe(prRepo.headCommit);
+      expect(prCast.cloneUrls).toEqual([prRepo.cloneUrl]);
+
+      // ── 2. Mirror usePRMergeability's fast-path merge commit build ──────
+      const abort = new AbortController();
+      const tipData = await prPool.getFullTree(
+        seeded.commit,
+        abort.signal,
+        prCast.cloneUrls,
+      );
+      expect(tipData).not.toBeNull();
+
+      const mergeBase = await prPool.findMergeBaseBetween(
+        prRepo.headCommit,
+        seeded.commit,
+        abort.signal,
+        prCast.cloneUrls,
+      );
+      expect(mergeBase).toBe(prRepo.headCommit);
+
+      if (!tipData || !mergeBase) {
+        throw new Error("PR mergeability setup failed unexpectedly");
+      }
+
+      const committer: CommitPerson = {
+        name: "maintainer",
+        email: `${maintainer.npub}@nostr`,
+        timestamp: prRepo.headCommitTimestamp + 120,
+        timezone: "+0000",
+      };
+      const prNevent = buildPRNevent(seeded.pr.id, contributor.pubkey, [
+        server.relayUrl,
+      ]);
+      const mergeCommitObj = await createMergeCommitObject(
+        tipData.commit.tree,
+        prRepo.headCommit,
+        seeded.commit,
+        committer,
+        {
+          rootEventId: seeded.pr.id,
+          title: prCast.subject,
+          nevent: prNevent,
+          authorPubkey: contributor.pubkey,
+          description: prCast.body,
+        },
+      );
+
+      const transports = makePoolTransports(
+        prPool,
+        [relay],
+        [prRepo.cloneUrl],
+        seeded.state,
+      );
+
+      // ── 3. Run the production PR merge orchestration ────────────────────
+      const result = await performPRMerge({
+        signer: maintainer,
+        signerPubkey: maintainer.pubkey,
+        mergeCommitObj,
+        prTipCommitHash: seeded.commit,
+        mergeBase,
+        extraObjects: [],
+        dTag: prRepo.identifier,
+        defaultBranchName: prRepo.branch,
+        defaultBranchHead: prRepo.headCommit,
+        currentStateEvent: seeded.state,
+        repoCoords: [prRepo.coordinate],
+        rootEventId: seeded.pr.id,
+        rootAuthorPubkey: contributor.pubkey,
+        fetchBranchObjects: (tipCommitHash, stopAtCommitHash) =>
+          prPool.getPackableObjectsForCommitRange(
+            tipCommitHash,
+            stopAtCommitHash,
+            new AbortController().signal,
+            prCast.cloneUrls,
+          ),
+        ...transports.transports,
+      });
+      expect(transports.getPushSummary()?.successCount).toBe(1);
+
+      // ── 4. Assert: merge commit is the new default branch tip ────────────
+      const refs = await getReceivePackRefs(prRepo.cloneUrl);
+      expect(refs.refs[`refs/heads/${prRepo.branch}`]).toBe(
+        result.mergeCommit.hash,
+      );
+      expect(refs.refs[`refs/heads/${seeded.branch}`]).toBe(seeded.commit);
+      expect(result.mergeCommit.hash).not.toBe(prRepo.headCommit);
+      expect(result.mergeCommit.hash).not.toBe(seeded.commit);
+
+      // ── 5. Assert: the kind:30618 state points main at the merge ────────
+      let mergedState: NostrEvent | undefined;
+      for (let attempt = 0; attempt < 20 && !mergedState; attempt++) {
+        const states = await relay.query([
+          {
+            kinds: [REPO_STATE_KIND],
+            authors: [maintainer.pubkey],
+            "#d": [prRepo.identifier],
+          },
+        ]);
+        mergedState = states.find((s) => s.id === result.state.id);
+        if (!mergedState) await new Promise((r) => setTimeout(r, 250));
+      }
+      expect(mergedState).toBeDefined();
+      const headRefTag = mergedState?.tags.find(
+        ([t]) => t === `refs/heads/${prRepo.branch}`,
+      );
+      expect(headRefTag?.[1]).toBe(result.mergeCommit.hash);
+      const prBranchTag = mergedState?.tags.find(
+        ([t]) => t === `refs/heads/${seeded.branch}`,
+      );
+      expect(prBranchTag?.[1]).toBe(seeded.commit);
+
+      // ── 6. Assert: the kind:1631 merged status is queryable ─────────────
+      const statuses = await relay.query([
+        { kinds: [STATUS_RESOLVED], "#e": [seeded.pr.id] },
+      ]);
+      expect(statuses.map((e) => e.id)).toContain(result.status.id);
+      const mergeCommitTag = result.status.tags.find(
+        ([t]) => t === "merge-commit",
+      );
+      expect(mergeCommitTag?.[1]).toBe(result.mergeCommit.hash);
+
+      expect(transports.events.map((e) => e.id)).toEqual(
+        expect.arrayContaining([result.state.id, result.status.id]),
+      );
+      expect(result.pushedObjects.map((o) => o.hash)).toContain(seeded.commit);
+    } finally {
+      prPool.dispose();
+    }
   });
 });

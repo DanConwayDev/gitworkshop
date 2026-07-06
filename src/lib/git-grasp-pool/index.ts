@@ -64,3 +64,58 @@ export {
 // --- Diff processing ---
 export { diffTrees, generateUnifiedDiff } from "./diff-utils";
 export type { FileChange, FileChangeStatus } from "./diff-utils";
+
+// --- Multi-server Grasp push ---
+export {
+  pushRefUpdateToGraspServers,
+  pushToGraspServer,
+  getPostPushStateRefs,
+  uniquePackableObjects,
+  summarizePushDelivery,
+  formatCloneUrlHost,
+  getGitRemoteHostname,
+} from "./grasp-push";
+export type {
+  PushDeliveryOutcome,
+  PushDeliverySummary,
+  DesiredStateRef,
+  CatchUpObjectFetcher,
+  GraspPushContext,
+  PushRefUpdateParams,
+} from "./grasp-push";
+
+// --- Merge orchestration ---
+export {
+  performMerge,
+  performPRMerge,
+  performApplyToTip,
+  signMergedStatus,
+  buildPRNevent,
+  createCommitPersonNow,
+} from "./merge";
+export type {
+  MergeSigner,
+  PerformMergeStep,
+  PatchEventRef,
+  GraspMergeContext,
+  GraspMergeTransports,
+  PerformMergeParams,
+  PerformMergeResult,
+  PerformPRMergeParams,
+  PerformPRMergeResult,
+  PerformApplyToTipParams,
+  PerformApplyToTipResult,
+} from "./merge";
+
+// --- Already-merged detection ---
+export {
+  findDetectedNgitMergeCommit,
+  findDetectedNgitMergeCommitInHistory,
+  DETECTED_MERGE_HISTORY_MAX_WITHOUT_BASE,
+  DETECTED_MERGE_HISTORY_MAX_WITH_BASE,
+  DETECTED_MERGE_HISTORY_LOOKBACK_STEP,
+} from "./detect-merged";
+export type {
+  DetectedMergeCommit,
+  DetectedMergeScanResult,
+} from "./detect-merged";

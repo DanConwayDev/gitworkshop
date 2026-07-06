@@ -42,6 +42,13 @@ import {
 } from "./git-http";
 import { UrlStateManager, UrlTracker } from "./url-state";
 import { StateEventManager } from "./state-event";
+import {
+  pushRefUpdateToGraspServers,
+  type PushDeliverySummary,
+} from "./grasp-push";
+import type { NostrEvent } from "nostr-tools";
+import type { PackableObject } from "@/lib/git-packfile";
+import { ZERO_HASH, type RefUpdate } from "@/lib/git-push";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -98,6 +105,39 @@ function ancestryDistances(
   }
 
   return distances;
+}
+
+/**
+ * Estimate the `deepen` depth needed for a shallow fetch from `tipCommitId` to
+ * include every known commit in `tipCommitId..stopAtCommitId`.
+ *
+ * Walks the commit graph (via parent links) rather than relying on the
+ * timestamp-sorted order of `history` — rebased or cherry-picked commits with
+ * old committer dates, clock skew, and merge-heavy side branches all make a
+ * timestamp index under-count the true graph depth. `deepen N` includes
+ * commits whose minimum parent-distance from the tip is less than N, so the
+ * required depth is the maximum such distance plus one. Over-estimating is
+ * safe (the server ignores objects it already has); under-estimating produces
+ * an incomplete pack.
+ */
+function estimateDeepenDepth(
+  history: Commit[],
+  tipCommitId: string,
+  stopAtCommitId: string,
+): number {
+  const byHash = new Map(history.map((commit) => [commit.hash, commit]));
+  const distances = ancestryDistances(tipCommitId, byHash);
+
+  // The stop commit itself is excluded: the receiving side already has it.
+  // Unknown parent hashes (beyond the walked history) are kept — they add one
+  // level of safety margin when the history walk was truncated.
+  let maxDistance = 0;
+  for (const [hash, distance] of distances) {
+    if (hash === stopAtCommitId) continue;
+    maxDistance = Math.max(maxDistance, distance);
+  }
+
+  return Math.max(1, maxDistance + 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -1362,6 +1402,106 @@ export class GitGraspPool {
       },
       fallbackUrls,
     );
+  }
+
+  /**
+   * Fetch full, packable git objects for a commit range headed by `tipCommitId`.
+   *
+   * This is used when pushing browser-created PR merge commits. The merge commit
+   * has the PR tip as its second parent, so the target server must also receive
+   * any PR branch commits/blobs it does not already have. `stopAtCommitId` is
+   * used only to estimate the required shallow depth; the returned pack may
+   * include extra already-known objects, which git-receive-pack accepts.
+   */
+  async getPackableObjectsForCommitRange(
+    tipCommitId: string,
+    stopAtCommitId: string,
+    signal: AbortSignal,
+    fallbackUrls?: string[],
+    maxDepth = 200,
+  ): Promise<PackableObject[] | null> {
+    const history = await this.getCommitHistory(
+      tipCommitId,
+      maxDepth,
+      signal,
+      fallbackUrls,
+      stopAtCommitId,
+    );
+    if (signal.aborted) return null;
+
+    if (!history || history.length === 0) return null;
+
+    const requestedDepth = estimateDeepenDepth(
+      history,
+      tipCommitId,
+      stopAtCommitId,
+    );
+
+    return this.withFallback(
+      signal,
+      async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchPackableObjects(
+          url,
+          tipCommitId,
+          requestedDepth,
+          signal,
+        );
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+        }
+        return result;
+      },
+      fallbackUrls,
+    );
+  }
+
+  /**
+   * Push one ref update (plus any state-event refs a server is missing) to
+   * the given Grasp servers, in parallel, tolerating lagging mirrors.
+   *
+   * The pool supplies catch-up objects via
+   * {@link getPackableObjectsForCommitRange}; see `grasp-push.ts` for the
+   * per-server semantics. Guards the signed Nostr state with a fast-forward
+   * check before anything is sent. Resolves once at least one server
+   * accepted; throws when every server rejected.
+   *
+   * @param objects - All objects required for the primary update.
+   * @param refUpdate - The primary ref update (consensus old hash → new hash).
+   * @param options.targetCloneUrls - Grasp server clone URLs to push to
+   *   (usually the repo's announced Grasp URLs, not the pool's full URL set).
+   * @param options.currentStateEvent - Current kind:30618 state; its refs form
+   *   the post-push ref set every server is verified against.
+   * @param options.fallbackUrls - Extra URLs for catch-up object fetches.
+   */
+  async pushRefUpdate(
+    objects: PackableObject[],
+    refUpdate: RefUpdate,
+    options: {
+      targetCloneUrls: string[];
+      currentStateEvent?: NostrEvent | null;
+      fallbackUrls?: string[];
+      signal?: AbortSignal;
+    },
+  ): Promise<PushDeliverySummary> {
+    return pushRefUpdateToGraspServers({
+      cloneUrls: options.targetCloneUrls,
+      objects,
+      refUpdate,
+      currentStateEvent: options.currentStateEvent,
+      fetchCatchUpObjects: (tipCommitId, stopAtCommitId) => {
+        if (!tipCommitId || tipCommitId === ZERO_HASH) {
+          return Promise.resolve(null);
+        }
+        return this.getPackableObjectsForCommitRange(
+          tipCommitId,
+          stopAtCommitId,
+          options.signal ?? new AbortController().signal,
+          options.fallbackUrls,
+        );
+      },
+    });
   }
 
   /**
