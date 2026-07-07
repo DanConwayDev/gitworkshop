@@ -8,6 +8,8 @@
  *    so packfile fetches work on older Chromium builds.
  *  - fetchPackfile: accepts an AbortSignal so stalled upload-pack requests can
  *    be cancelled by callers instead of leaving UI flows waiting forever.
+ *  - fetchPackfile: parses upload-pack responses as pkt-lines so shallow
+ *    response flush packets before NAK/ACK negotiation do not hide the pack.
  */
 
 import { type PackfileResult, parsePackfile } from "./parse-packfile.ts";
@@ -28,6 +30,23 @@ export class InvalidCommit extends Error {
   constructor(commit: string) {
     super(`invalid commit '${commit}', must be 20 byte hex`);
   }
+}
+
+function decodeAscii(data: Uint8Array): string {
+  return String.fromCharCode(...data);
+}
+
+function readPktLen(data: Uint8Array, offset: number): number {
+  if (offset + 4 > data.length) {
+    throw new Error("truncated pkt-line length");
+  }
+
+  const len = parseInt(decodeAscii(data.subarray(offset, offset + 4)), 16);
+  if (Number.isNaN(len)) {
+    throw new Error(`invalid pkt-line length at offset ${offset}`);
+  }
+
+  return len;
 }
 
 /**
@@ -69,45 +88,59 @@ export async function fetchPackfile(
     throw new Error("empty response");
   }
 
-  let prev = 0;
   let offset = 0;
   while (offset < data.length) {
-    prev = offset;
-    const idx = data.subarray(prev + 1).indexOf(10);
-    if (idx === -1) {
-      if (
-        String.fromCharCode(...data.subarray(4, 32)) ===
-        "ERR upload-pack: not our ref"
-      ) {
-        throw new MissingRef();
-      }
-
-      throw new Error(
-        `unexpected '${String.fromCharCode(...data.subarray(0, 63))}'`,
-      );
+    const len = readPktLen(data, offset);
+    if (len === 0) {
+      offset += 4;
+      continue;
     }
-    offset = prev + idx + 1;
-    const line = String.fromCharCode(...data.subarray(prev + 4, offset));
-    if (line.startsWith("NAK") || line.startsWith("ACK")) {
+
+    if (len < 4 || offset + len > data.length) {
+      throw new Error(`invalid pkt-line at offset ${offset}`);
+    }
+
+    const payloadStart = offset + 4;
+    const payload = data.subarray(payloadStart, offset + len);
+
+    // Side-band channels mark the beginning of the packfile stream. Leave
+    // offset at the packet header so the packfile loop below can consume it.
+    if (payload[0] === 1 || payload[0] === 2 || payload[0] === 3) {
       break;
     }
+
+    const line = decodeAscii(payload);
+    if (line.startsWith("ERR upload-pack: not our ref")) {
+      throw new MissingRef();
+    }
+    if (line.startsWith("ERR ")) {
+      throw new Error(line.trim());
+    }
+
+    // Negotiation/status pkt-lines (shallow/unshallow/ACK/NAK) precede the
+    // side-band pack stream. Continue until the first side-band packet.
+    offset += len;
   }
-  offset++;
 
   const packfileData: number[] = [];
   while (offset < data.length) {
-    const len = parseInt(
-      String.fromCharCode(...data.subarray(offset, offset + 4)),
-      16,
-    );
+    const len = readPktLen(data, offset);
+    if (len === 0) break;
+
+    if (len < 5 || offset + len > data.length) {
+      throw new Error(`invalid side-band pkt-line at offset ${offset}`);
+    }
+
     if (data[offset + 4] === 2) {
       // just a message, ignore
     } else if (data[offset + 4] === 1) {
       packfileData.push(...data.subarray(offset + 4 + 1, offset + len));
+    } else if (data[offset + 4] === 3) {
+      throw new Error(
+        decodeAscii(data.subarray(offset + 4 + 1, offset + len)).trim(),
+      );
     }
     offset += len;
-
-    if (len === 0) break;
   }
 
   return parsePackfile(new Uint8Array(packfileData));

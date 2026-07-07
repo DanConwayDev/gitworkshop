@@ -1442,7 +1442,9 @@ export class GitGraspPool {
       async (url) => {
         const start = Date.now();
         const haveCommitIds =
-          stopAtCommitId === ZERO_HASH ? [] : [stopAtCommitId];
+          stopAtCommitId && stopAtCommitId !== ZERO_HASH
+            ? [stopAtCommitId]
+            : [];
         const result = await this.http.fetchPackableObjects(
           url,
           tipCommitId,
