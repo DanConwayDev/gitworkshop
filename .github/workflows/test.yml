@@ -15,21 +15,20 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js 24.x
-        uses: actions/setup-node@v4
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v31
         with:
-          node-version: "24.x"
-          cache: "pnpm"
-          cache-dependency-path: pnpm-lock.yaml
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Verify npm fallback lockfile
-        run: npm ci --dry-run --ignore-scripts
+        run: nix develop --command npm ci --dry-run --ignore-scripts
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+        run: nix develop --command pnpm install --frozen-lockfile
 
       - name: Run tests
-        run: pnpm test
+        run: nix develop --command pnpm test
+
+      - name: Run e2e tests
+        run: nix develop --command pnpm test:e2e
