@@ -60,7 +60,10 @@ export interface FileEntry {
  *                        errored). NOT confirmed-missing objects.
  */
 export type GitExplorerErrorKind =
-  "no-servers" | "no-branches" | "commit-missing" | "fetch-failed";
+  | "no-servers"
+  | "no-branches"
+  | "commit-missing"
+  | "fetch-failed";
 
 export interface GitExplorerErrorDetail {
   kind: GitExplorerErrorKind;

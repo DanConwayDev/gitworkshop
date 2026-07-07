@@ -53,7 +53,10 @@ export interface CommitRangeData {
 
 /** Connection status for a single clone URL */
 export type UrlConnectionStatus =
-  "untested" | "ok" | "error" | "permanent-failure";
+  | "untested"
+  | "ok"
+  | "error"
+  | "permanent-failure";
 
 /**
  * Sync status of a single git server for a given ref, relative to the
@@ -69,7 +72,12 @@ export type UrlConnectionStatus =
  * - "error"     : permanent failure (unreachable, 404, etc.)
  */
 export type UrlRefStatus =
-  "match" | "behind" | "ahead" | "connected" | "unknown" | "error";
+  | "match"
+  | "behind"
+  | "ahead"
+  | "connected"
+  | "unknown"
+  | "error";
 
 /** Full tracked state for a single clone URL */
 export interface UrlState {
@@ -250,7 +258,11 @@ export interface RefDiscrepancy {
 
 /** Overall health of the pool */
 export type PoolHealth =
-  "idle" | "connecting" | "ok" | "degraded" | "all-failed";
+  | "idle"
+  | "connecting"
+  | "ok"
+  | "degraded"
+  | "all-failed";
 
 /** The full observable state exposed to UI consumers */
 export interface PoolState {

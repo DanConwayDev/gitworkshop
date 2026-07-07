@@ -180,7 +180,9 @@ export interface RepoZapNotificationItem {
 
 /** Union of all notification item types */
 export type NotificationItem =
-  ThreadNotificationItem | SocialNotificationItem | RepoZapNotificationItem;
+  | ThreadNotificationItem
+  | SocialNotificationItem
+  | RepoZapNotificationItem;
 
 // ---------------------------------------------------------------------------
 // Default state

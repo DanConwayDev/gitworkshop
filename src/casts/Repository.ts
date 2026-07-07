@@ -44,8 +44,10 @@ export class Repository extends EventCast<RepositoryEvent> {
   }
 
   get dTag(): string {
-    return getOrComputeCachedValue(this.event, DTagSymbol, () =>
-      getTagValue(this.event, "d")!,
+    return getOrComputeCachedValue(
+      this.event,
+      DTagSymbol,
+      () => getTagValue(this.event, "d")!,
     );
   }
 

@@ -145,7 +145,9 @@ type MergeStep =
   | "failed";
 
 type MergePanelStatus =
-  MergeabilityStatus | PRMergeabilityStatus | "detected-merged";
+  | MergeabilityStatus
+  | PRMergeabilityStatus
+  | "detected-merged";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -361,7 +363,8 @@ export function MergePanel({
   const mergeability = isPRType
     ? {
         status: prMergeability.status as
-          MergeabilityStatus | PRMergeabilityStatus,
+          | MergeabilityStatus
+          | PRMergeabilityStatus,
         buildResult: null,
         applyResult: null,
         conflicts: prMergeability.conflicts,
@@ -373,7 +376,8 @@ export function MergePanel({
     : {
         ...patchMergeability,
         status: patchMergeability.status as
-          MergeabilityStatus | PRMergeabilityStatus,
+          | MergeabilityStatus
+          | PRMergeabilityStatus,
         mergeBaseMismatch: null,
       };
 

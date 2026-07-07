@@ -36,7 +36,11 @@ import type { GitGraspPool } from "@/lib/git-grasp-pool";
 // ---------------------------------------------------------------------------
 
 export type PRMergeabilityStatus =
-  "idle" | "loading" | "ready" | "conflicts" | "error";
+  | "idle"
+  | "loading"
+  | "ready"
+  | "conflicts"
+  | "error";
 
 export interface PRMergeResult {
   /** The pre-built merge commit PackableObject */

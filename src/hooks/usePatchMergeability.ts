@@ -40,7 +40,12 @@ import type { GitGraspPool } from "@/lib/git-grasp-pool";
 // ---------------------------------------------------------------------------
 
 export type MergeabilityStatus =
-  "loading" | "ready" | "ready-apply-only" | "conflicts" | "error" | "idle";
+  | "loading"
+  | "ready"
+  | "ready-apply-only"
+  | "conflicts"
+  | "error"
+  | "idle";
 
 export interface PatchMergeability {
   /** Current status of the mergeability check */
