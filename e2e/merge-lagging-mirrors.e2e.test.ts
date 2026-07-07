@@ -462,6 +462,46 @@ describeIfGrasp("e2e — lagging Grasp mirror merge fan-out", () => {
     expect(refsB.refs[tag.refName]).toBe(annotatedTagObject.hash);
   }, 90_000);
 
+  it("preserves a lightweight tag that only A knew about and pushes it to B with the merge", async () => {
+    fixture = await createFixture();
+    const seededRepo = await seedMultiServerRepo(
+      [fixture.serverA, fixture.serverB],
+      [fixture.relayA, fixture.relayB],
+      fixture.maintainer,
+      { identifier: "lightweight-tag-preservation" },
+    );
+    pool = new GitGraspPool({
+      cloneUrls: seededRepo.cloneUrls,
+      corsProxyBase: null,
+    });
+    const tag = await seedTag(seededRepo, fixture.maintainer, {
+      name: "v1.0.0-lightweight",
+      includeInStateTo: [fixture.relayA],
+    });
+    const repo = { ...tag.repo, servers: seededRepo.servers };
+
+    const refsABefore = await getReceivePackRefs(repo.servers[0].cloneUrl);
+    expect(refsABefore.refs[tag.refName]).toBe(tag.commit);
+
+    const { result, pushSummary } = await performPatchMergeOnMirrors({
+      repo,
+      fixture,
+      pool,
+      currentStateEvent: tag.state,
+    });
+
+    expect(pushSummary?.successCount).toBe(2);
+    const tagInMergedState = result.state.tags.find(
+      ([name]) => name === tag.refName,
+    );
+    expect(tagInMergedState?.[1]).toBe(tag.commit);
+    const refsB = await getReceivePackRefs(repo.servers[1].cloneUrl);
+    expect(refsB.refs[`refs/heads/${repo.branch}`]).toBe(
+      result.mergeCommit.hash,
+    );
+    expect(refsB.refs[tag.refName]).toBe(tag.commit);
+  }, 90_000);
+
   it("creates the default branch on a fresh mirror that had no branch", async () => {
     fixture = await createFixture();
     const repo = await seedMultiServerRepo(
