@@ -37,11 +37,14 @@ import {
   RelayClient,
   TestSigner,
   seedRepo,
+  seedTag,
   seedPatchPR,
   seedKindPR,
   makePoolTransports,
   graspBinaryAvailable,
   REPO_STATE_KIND,
+  buildStateWithRefs,
+  waitUntilAfterUnixSecond,
   type SeededRepo,
 } from "./harness";
 import { Patch } from "@/casts/Patch";
@@ -58,7 +61,8 @@ import {
 } from "@/lib/git-grasp-pool";
 import { GitGraspPool } from "@/lib/git-grasp-pool";
 import { getReceivePackRefs, ZERO_HASH } from "@/lib/git-push";
-import type { CommitPerson } from "@/lib/git-objects";
+import { gitObjectBytes, sha1hex, type CommitPerson } from "@/lib/git-objects";
+import type { PackableObject } from "@/lib/git-packfile";
 import { PR_KIND, STATUS_RESOLVED } from "@/lib/nip34";
 
 const describeIfGrasp = graspBinaryAvailable() ? describe : describe.skip;
@@ -68,6 +72,32 @@ const describeIfGrasp = graspBinaryAvailable() ? describe : describe.skip;
 // (`indexedDB is not defined` in node — see e2e/HANDOFF.md) is fixed in
 // src/lib/git-grasp-pool/cache.ts, so the full merge path runs end-to-end here.
 const describeMerge = describeIfGrasp;
+
+async function packAnnotatedTag(params: {
+  name: string;
+  targetCommit: string;
+  tagger: CommitPerson;
+  message: string;
+}): Promise<PackableObject> {
+  const message = params.message.endsWith("\n")
+    ? params.message
+    : `${params.message}\n`;
+  const content = new TextEncoder().encode(
+    `object ${params.targetCommit}\n` +
+      `type commit\n` +
+      `tag ${params.name}\n` +
+      `tagger ${params.tagger.name} <${params.tagger.email}> ` +
+      `${params.tagger.timestamp} ${params.tagger.timezone}\n` +
+      `\n` +
+      message,
+  );
+
+  return {
+    type: "tag",
+    data: content,
+    hash: await sha1hex(gitObjectBytes("tag", content)),
+  };
+}
 
 describeMerge("e2e — Merge button (merge strategy)", () => {
   let server: GraspServer;
@@ -228,6 +258,185 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
     // sanity: ZERO_HASH constant is the all-zero ref (documents the push contract)
     expect(ZERO_HASH).toMatch(/^0{40}$/);
   });
+
+  it("merges a patch when an in-sync repo has annotated and lightweight tags plus another branch", async () => {
+    const taggedRepo = await seedRepo(server, relay, maintainer, {
+      identifier: "merge-tagged-in-sync-repo",
+      name: "Merge Tagged In-Sync Repo",
+      files: { "README.md": "# tagged repo\n\nbase line\n" },
+    });
+    const taggedPool = new GitGraspPool({
+      cloneUrls: [taggedRepo.cloneUrl],
+      corsProxyBase: null,
+    });
+
+    try {
+      const extraBranch = await seedKindPR(
+        taggedRepo,
+        relay,
+        maintainer,
+        contributor,
+        {
+          branch: "release/extra-branch",
+          path: "EXTRA-BRANCH.md",
+          content: "this branch exists before the merge\n",
+          subject: "Seed extra branch",
+        },
+      );
+      if (!extraBranch.state) throw new Error("extra branch state missing");
+
+      const repoWithBranch: SeededRepo = {
+        ...taggedRepo,
+        state: extraBranch.state,
+      };
+      const tagger: CommitPerson = {
+        name: "maintainer",
+        email: `${maintainer.npub}@nostr`,
+        timestamp: taggedRepo.headCommitTimestamp + 90,
+        timezone: "+0000",
+      };
+      const annotatedTagObject = await packAnnotatedTag({
+        name: "v1.0.0",
+        targetCommit: taggedRepo.headCommit,
+        tagger,
+        message: "Release v1.0.0",
+      });
+      const annotatedTag = await seedTag(repoWithBranch, maintainer, {
+        name: "v1.0.0",
+        commit: annotatedTagObject.hash,
+        objects: [annotatedTagObject],
+        pushTo: [server],
+        includeInStateTo: [relay],
+      });
+      const lightweightTag = await seedTag(annotatedTag.repo, maintainer, {
+        name: "v1.0.0-lightweight",
+        commit: taggedRepo.headCommit,
+        pushTo: [server],
+        includeInStateTo: [relay],
+      });
+
+      const refMap = new Map<string, string>();
+      for (const [name, hash] of lightweightTag.state.tags) {
+        if (name?.startsWith("refs/") && hash) refMap.set(name, hash);
+      }
+      refMap.set(`${annotatedTag.refName}^{}`, taggedRepo.headCommit);
+      const currentState = buildStateWithRefs(maintainer, {
+        identifier: taggedRepo.identifier,
+        refs: [...refMap].map(([name, commitHash]) => ({ name, commitHash })),
+        headBranch: taggedRepo.branch,
+      });
+      await relay.publish(currentState);
+      await waitUntilAfterUnixSecond(currentState.created_at);
+
+      const refsBefore = await getReceivePackRefs(taggedRepo.cloneUrl);
+      expect(refsBefore.refs[`refs/heads/${taggedRepo.branch}`]).toBe(
+        taggedRepo.headCommit,
+      );
+      expect(refsBefore.refs[`refs/heads/${extraBranch.branch}`]).toBe(
+        extraBranch.commit,
+      );
+      expect(refsBefore.refs[annotatedTag.refName]).toBe(
+        annotatedTagObject.hash,
+      );
+      expect(refsBefore.refs[`${annotatedTag.refName}^{}`]).toBe(
+        taggedRepo.headCommit,
+      );
+      expect(refsBefore.refs[lightweightTag.refName]).toBe(
+        taggedRepo.headCommit,
+      );
+
+      const seeded = await seedPatchPR(taggedRepo, relay, contributor, {
+        path: "TAGGED-MERGE.md",
+        content: "# Tagged merge\n\nmerge while preserving existing refs\n",
+        subject: "Merge with existing refs",
+      });
+      const store = new EventStore();
+      const patchCast = new Patch(seeded.patch, store);
+      const buildOutcome = await buildPatchChainObjects(
+        [patchCast],
+        taggedPool,
+        new AbortController().signal,
+        [taggedRepo.cloneUrl],
+      );
+      if ("reason" in buildOutcome) {
+        throw new Error(
+          `buildPatchChainObjects failed: ${buildOutcome.reason}`,
+        );
+      }
+
+      const transports = makePoolTransports(
+        taggedPool,
+        [relay],
+        [taggedRepo.cloneUrl],
+        currentState,
+      );
+      const result = await performMerge({
+        signer: maintainer,
+        signerPubkey: maintainer.pubkey,
+        chainObjects: buildOutcome.objects,
+        finalTreeHash: buildOutcome.finalTreeHash,
+        tipCommitHash: buildOutcome.tipCommitHash,
+        dTag: taggedRepo.identifier,
+        defaultBranchName: taggedRepo.branch,
+        defaultBranchHead: taggedRepo.headCommit,
+        currentStateEvent: currentState,
+        repoCoords: [taggedRepo.coordinate],
+        rootEventId: seeded.patch.id,
+        rootAuthorPubkey: contributor.pubkey,
+        subject: patchCast.subject,
+        prNevent: buildPRNevent(seeded.patch.id, contributor.pubkey, [
+          server.relayUrl,
+        ]),
+        committer: {
+          name: "maintainer",
+          email: `${maintainer.npub}@nostr`,
+          timestamp: taggedRepo.headCommitTimestamp + 180,
+          timezone: "+0000",
+        },
+        patchEventIds: [{ id: seeded.patch.id, pubkey: contributor.pubkey }],
+        ...transports.transports,
+      });
+
+      expect(transports.getPushSummary()?.successCount).toBe(1);
+      const refsAfter = await getReceivePackRefs(taggedRepo.cloneUrl);
+      expect(refsAfter.refs[`refs/heads/${taggedRepo.branch}`]).toBe(
+        result.mergeCommit.hash,
+      );
+      expect(refsAfter.refs[`refs/heads/${extraBranch.branch}`]).toBe(
+        extraBranch.commit,
+      );
+      expect(refsAfter.refs[annotatedTag.refName]).toBe(
+        annotatedTagObject.hash,
+      );
+      expect(refsAfter.refs[`${annotatedTag.refName}^{}`]).toBe(
+        taggedRepo.headCommit,
+      );
+      expect(refsAfter.refs[lightweightTag.refName]).toBe(
+        taggedRepo.headCommit,
+      );
+
+      expect(
+        result.state.tags.find(([name]) => name === annotatedTag.refName)?.[1],
+      ).toBe(annotatedTagObject.hash);
+      expect(
+        result.state.tags.find(
+          ([name]) => name === `${annotatedTag.refName}^{}`,
+        )?.[1],
+      ).toBe(taggedRepo.headCommit);
+      expect(
+        result.state.tags.find(
+          ([name]) => name === lightweightTag.refName,
+        )?.[1],
+      ).toBe(taggedRepo.headCommit);
+      expect(
+        result.state.tags.find(
+          ([name]) => name === `refs/heads/${extraBranch.branch}`,
+        )?.[1],
+      ).toBe(extraBranch.commit);
+    } finally {
+      taggedPool.dispose();
+    }
+  }, 90_000);
 
   it("seeds a kind:1618 PR branch, builds the merge commit, then merges it to the branch tip", async () => {
     const prRepo = await seedRepo(server, relay, maintainer, {
