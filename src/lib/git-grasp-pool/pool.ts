@@ -1441,14 +1441,11 @@ export class GitGraspPool {
       signal,
       async (url) => {
         const start = Date.now();
-        const haveCommitIds =
-          stopAtCommitId === ZERO_HASH ? [] : [stopAtCommitId];
         const result = await this.http.fetchPackableObjects(
           url,
           tipCommitId,
           requestedDepth,
           signal,
-          haveCommitIds,
         );
         if (result) {
           const tracker = this.urlManager.get(url);
