@@ -15,7 +15,7 @@ import { Copy, Check, Download, Terminal, Package, Wrench } from "lucide-react";
 // Constants
 // ---------------------------------------------------------------------------
 
-const NGIT_VERSION = "v2.6.0";
+const NGIT_VERSION = "v2.6.2";
 
 // ---------------------------------------------------------------------------
 // Platform detection
