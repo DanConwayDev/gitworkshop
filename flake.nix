@@ -37,6 +37,78 @@
           # dev but not reproducible in CI.
           shellHook = ''
             export NGIT_GRASP_BIN=${ngit-grasp-pkg}/bin/ngit-grasp
+
+            if git rev-parse --git-dir >/dev/null 2>&1; then
+              hooks_dir="$(git rev-parse --git-dir)/hooks"
+              mkdir -p "$hooks_dir"
+              hook="$hooks_dir/pre-push"
+              if [ -f "$hook" ] && ! grep -q "gitworkshop generated pre-push hook" "$hook"; then
+                echo "Leaving existing custom pre-push hook in place: $hook"
+              else
+                cat > "$hook" <<'EOF'
+#!/bin/sh
+# gitworkshop generated pre-push hook
+set -eu
+
+zero=0000000000000000000000000000000000000000
+run_e2e=0
+
+is_relevant_path() {
+  case "$1" in
+    e2e/*|vitest.e2e.config.ts|src/lib/git-*|src/lib/git-grasp-pool/*|src/lib/vendored/git-natural-api/*|src/hooks/useGitPool.ts|src/hooks/useGitExplorer.ts|src/pages/repo/RepoCodePage.tsx|src/components/MergePanel.tsx)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+check_range() {
+  base="$1"
+  tip="$2"
+  for path in $(git diff --name-only "$base" "$tip"); do
+    if is_relevant_path "$path"; then
+      run_e2e=1
+      return
+    fi
+  done
+}
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+
+  if [ "$remote_sha" = "$zero" ]; then
+    upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+    if [ -n "$upstream" ]; then
+      base="$(git merge-base "$local_sha" "$upstream" 2>/dev/null || true)"
+      if [ -n "$base" ]; then
+        check_range "$base" "$local_sha"
+      else
+        run_e2e=1
+      fi
+    else
+      run_e2e=1
+    fi
+  else
+    check_range "$remote_sha" "$local_sha"
+  fi
+done
+
+if [ "$run_e2e" -eq 0 ]; then
+  echo "Skipping e2e pre-push: no git/GRASP/e2e paths changed."
+  exit 0
+fi
+
+if command -v pnpm >/dev/null 2>&1 && pnpm --version >/dev/null 2>&1; then
+  pnpm run pre-push
+else
+  npm run pre-push
+fi
+EOF
+                chmod +x "$hook"
+              fi
+            fi
           '';
         };
       });

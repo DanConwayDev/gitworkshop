@@ -19,7 +19,8 @@
  *   1. `$NGIT_GRASP_BIN` — explicit override (preferred; set by the flake).
  *   2. `<repo-parent>/ngit-grasp/target/release/ngit-grasp` — sibling-clone
  *      fallback for local dev.
- *   3. Throw with a clear error.
+ *   3. `ngit-grasp` on PATH.
+ *   4. Throw with a clear error.
  *
  * ## Lifecycle
  *
@@ -32,9 +33,15 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  existsSync,
+  mkdtempSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -232,11 +239,28 @@ function locateBinary(): string {
   );
   if (existsSync(sibling)) return sibling;
 
+  const fromPath = locateOnPath("ngit-grasp");
+  if (fromPath) return fromPath;
+
   throw new Error(
     `ngit-grasp binary not found. Either set NGIT_GRASP_BIN to the binary ` +
       `path, or build a sibling clone at ${sibling} ` +
-      `(cargo build --release inside ../ngit-grasp).`,
+      `(cargo build --release inside ../ngit-grasp), or put ngit-grasp on PATH.`,
   );
+}
+
+function locateOnPath(binary: string): string | null {
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (!dir) continue;
+    const candidate = join(dir, binary);
+    try {
+      accessSync(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Keep searching.
+    }
+  }
+  return null;
 }
 
 /** True when an ngit-grasp binary is available — gate e2e suites on this. */

@@ -10,7 +10,9 @@
     "test": "tsc --noEmit && eslint && prettier --check --log-level warn . && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
     "pre-commit": "tsc --noEmit && eslint && prettier --write --log-level warn . && git update-index --again && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Pre-commit OK'",
     "format": "prettier -w .",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:e2e:if-available": "if [ -n \"$NGIT_GRASP_BIN\" ] || command -v ngit-grasp >/dev/null 2>&1; then NGIT_GRASP_BIN=\"${NGIT_GRASP_BIN:-$(command -v ngit-grasp)}\" vitest run --config vitest.e2e.config.ts; else echo 'Skipping e2e: ngit-grasp binary not found'; fi",
+    "pre-push": "npm run test:e2e:if-available"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

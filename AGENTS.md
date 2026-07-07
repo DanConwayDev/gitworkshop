@@ -76,12 +76,12 @@ else
 fi
 ```
 
-### End-to-end tests (`e2e/`) — opt-in, not part of pre-commit
+### End-to-end tests (`e2e/`) — conditional in pre-push
 
-`e2e/` holds integration tests that drive the app's real git + Nostr libraries against a live [`ngit-grasp`][grasp] server (push, packed refs, GRASP purgatory/state). They are **deliberately excluded** from `pnpm test` / `npm test` / pre-commit and run only via `pnpm test:e2e` or `npm run test:e2e` (`vitest.e2e.config.ts`).
+`e2e/` holds integration tests that drive the app's real git + Nostr libraries against a live [`ngit-grasp`][grasp] server (push, packed refs, GRASP purgatory/state). `pnpm test` / `npm test` and pre-commit do not run them; `nix develop` installs a `.git/hooks/pre-push` hook that runs them automatically when pushed commits changed git/GRASP/e2e-sensitive paths. They can also be run explicitly via `pnpm test:e2e` or `npm run test:e2e` (`vitest.e2e.config.ts`).
 
 - They run headless in the Node environment, but **require the `ngit-grasp` binary and a Node runtime** — they **cannot** run in a browser-only environment or anywhere the binary is unavailable. The Nix devShell provides a pinned binary (`nix develop`, sets `$NGIT_GRASP_BIN`); without a binary every suite **skips cleanly** rather than failing.
-- **Run them (if your environment can) whenever you change git/relay integration code — especially `src/lib/git-grasp-pool/`, `src/lib/git-*`, or the merge flow (`src/lib/git-grasp-pool/merge.ts` / `grasp-push.ts`)** — since those paths are not covered by the default unit run. Pre-commit won't catch regressions there.
+- **Run them (if your environment can) whenever you change git/relay integration code — especially `src/lib/git-grasp-pool/`, `src/lib/git-*`, or the merge flow (`src/lib/git-grasp-pool/merge.ts` / `grasp-push.ts`)** — since those paths are not covered by the default unit run. The Nix-installed pre-push hook catches common pushes touching those paths, but run `pnpm test:e2e` manually if you are outside Nix or want earlier feedback.
 - See `e2e/README.md` for the harness, invariants (never import `src/services/nostr.ts` singletons), and the degrade-don't-stub rule for browser-only globals in Node.
 
 [grasp]: https://github.com/ — see `../ngit-grasp`

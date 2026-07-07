@@ -7,15 +7,17 @@ app's own git + Nostr libraries against it. They call the **production code
 paths** directly (no mocks of the git/relay layers), so they catch
 integration bugs unit tests can't.
 
-They are **opt-in** and **excluded from the normal test run**:
+They run from the Nix-installed pre-push hook when relevant files changed:
 
 - `pnpm test` / `npm test` and `pnpm pre-commit` / `npm run pre-commit` do
-  **not** run them (the default Vitest config only includes `src/**`).
+  **not** run them; those stay fast and run the normal unit/build pipeline.
+- `nix develop` installs a `.git/hooks/pre-push` hook that runs e2e only when
+  pushed commits changed git/GRASP/e2e-sensitive paths.
 - Run them explicitly: `pnpm test:e2e` or `npm run test:e2e` (config:
   `vitest.e2e.config.ts`).
-- Each suite gates itself on `graspBinaryAvailable()` — with no `ngit-grasp`
-  binary present, suites **skip cleanly** instead of failing, so running this
-  config anywhere is safe.
+- Each suite still gates itself on `graspBinaryAvailable()` — with no
+  `ngit-grasp` binary present, suites **skip cleanly** instead of failing, so
+  running this config anywhere is safe.
 
 ## Why this runs headless (no browser)
 
@@ -70,6 +72,12 @@ The harness locates `ngit-grasp` in this order:
    gives a reproducible version).
 2. `../ngit-grasp/target/release/ngit-grasp` — sibling-clone fallback for local
    dev (`cargo build --release` inside `../ngit-grasp`).
+3. `ngit-grasp` on PATH.
+
+The Nix dev shell exports `NGIT_GRASP_BIN` and installs the pre-push hook, so
+local pushes from that shell use the pinned binary. Outside Nix, the hook or
+manual `pnpm test:e2e` runs can still use either `$NGIT_GRASP_BIN`, a sibling
+checkout, or `ngit-grasp` on PATH.
 
 Set `NGIT_GRASP_DEBUG=1` to forward the grasp subprocess's stdout/stderr to the
 test output when diagnosing a failure.
