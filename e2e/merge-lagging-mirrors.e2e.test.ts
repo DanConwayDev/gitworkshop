@@ -8,6 +8,8 @@ import {
   makePoolTransports,
   RelayClient,
   REPO_STATE_KIND,
+  buildStateWithRefs,
+  waitUntilAfterUnixSecond,
   seedKindPR,
   seedMultiServerRepo,
   seedPatchPR,
@@ -29,7 +31,8 @@ import {
 } from "@/lib/patch-merge";
 import { getReceivePackRefs, ZERO_HASH } from "@/lib/git-push";
 import { STATUS_RESOLVED } from "@/lib/nip34";
-import type { CommitPerson } from "@/lib/git-objects";
+import { gitObjectBytes, sha1hex, type CommitPerson } from "@/lib/git-objects";
+import type { PackableObject } from "@/lib/git-packfile";
 
 const describeIfGrasp = graspBinaryAvailable() ? describe : describe.skip;
 
@@ -87,6 +90,32 @@ function makeCommitter(
     email: `${signer.npub}@nostr`,
     timestamp: repo.headCommitTimestamp + 180,
     timezone: "+0000",
+  };
+}
+
+async function packAnnotatedTag(params: {
+  name: string;
+  targetCommit: string;
+  tagger: CommitPerson;
+  message: string;
+}): Promise<PackableObject> {
+  const message = params.message.endsWith("\n")
+    ? params.message
+    : `${params.message}\n`;
+  const content = new TextEncoder().encode(
+    `object ${params.targetCommit}\n` +
+      `type commit\n` +
+      `tag ${params.name}\n` +
+      `tagger ${params.tagger.name} <${params.tagger.email}> ` +
+      `${params.tagger.timestamp} ${params.tagger.timezone}\n` +
+      `\n` +
+      message,
+  );
+
+  return {
+    type: "tag",
+    data: content,
+    hash: await sha1hex(gitObjectBytes("tag", content)),
   };
 }
 
@@ -363,7 +392,7 @@ describeIfGrasp("e2e — lagging Grasp mirror merge fan-out", () => {
     expect(refsA.refs[`refs/heads/${prSeed.branch}`]).toBe(prSeed.commit);
   }, 90_000);
 
-  it("preserves a tag that only A knew about and pushes it to B with the merge", async () => {
+  it("preserves an annotated tag that only A knew about and pushes it to B with the merge", async () => {
     fixture = await createFixture();
     const seededRepo = await seedMultiServerRepo(
       [fixture.serverA, fixture.serverB],
@@ -375,29 +404,67 @@ describeIfGrasp("e2e — lagging Grasp mirror merge fan-out", () => {
       cloneUrls: seededRepo.cloneUrls,
       corsProxyBase: null,
     });
+    const annotatedTagObject = await packAnnotatedTag({
+      name: "v1.0.0",
+      targetCommit: seededRepo.headCommit,
+      tagger: {
+        ...makeCommitter(seededRepo, fixture.maintainer),
+        timestamp: seededRepo.headCommitTimestamp + 90,
+      },
+      message: "Release v1.0.0",
+    });
     const tag = await seedTag(seededRepo, fixture.maintainer, {
       name: "v1.0.0",
+      commit: annotatedTagObject.hash,
+      objects: [annotatedTagObject],
+      pushTo: [fixture.serverA],
       includeInStateTo: [fixture.relayA],
     });
+    const currentState = buildStateWithRefs(fixture.maintainer, {
+      identifier: seededRepo.identifier,
+      refs: [
+        {
+          name: `refs/heads/${seededRepo.branch}`,
+          commitHash: seededRepo.headCommit,
+        },
+        { name: tag.refName, commitHash: annotatedTagObject.hash },
+        { name: `${tag.refName}^{}`, commitHash: seededRepo.headCommit },
+      ],
+      headBranch: seededRepo.branch,
+    });
+    await fixture.relayA.publish(currentState);
+    await waitUntilAfterUnixSecond(currentState.created_at);
     const repo = { ...tag.repo, servers: seededRepo.servers };
+
+    const refsABefore = await getReceivePackRefs(repo.servers[0].cloneUrl);
+    expect(refsABefore.refs[tag.refName]).toBe(annotatedTagObject.hash);
+    expect(refsABefore.refs[`${tag.refName}^{}`]).toBe(seededRepo.headCommit);
+    const refsBBefore = await getReceivePackRefs(repo.servers[1].cloneUrl);
+    expect(refsBBefore.refs[tag.refName]).toBeUndefined();
+    expect(refsBBefore.refs[`${tag.refName}^{}`]).toBeUndefined();
 
     const { result, pushSummary } = await performPatchMergeOnMirrors({
       repo,
       fixture,
       pool,
-      currentStateEvent: tag.state,
+      currentStateEvent: currentState,
     });
 
     expect(pushSummary?.successCount).toBe(2);
     const tagInMergedState = result.state.tags.find(
       ([name]) => name === tag.refName,
     );
-    expect(tagInMergedState?.[1]).toBe(tag.commit);
+    expect(tagInMergedState?.[1]).toBe(annotatedTagObject.hash);
+    const peeledTagInMergedState = result.state.tags.find(
+      ([name]) => name === `${tag.refName}^{}`,
+    );
+    expect(peeledTagInMergedState?.[1]).toBe(seededRepo.headCommit);
     const refsB = await getReceivePackRefs(repo.servers[1].cloneUrl);
     expect(refsB.refs[`refs/heads/${repo.branch}`]).toBe(
       result.mergeCommit.hash,
     );
-    expect(refsB.refs[tag.refName]).toBe(tag.commit);
+    expect(refsB.refs[tag.refName]).toBe(annotatedTagObject.hash);
+    expect(refsB.refs[`${tag.refName}^{}`]).toBe(seededRepo.headCommit);
   }, 90_000);
 
   it("creates the default branch on a fresh mirror that had no branch", async () => {
