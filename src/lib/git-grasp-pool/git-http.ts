@@ -214,6 +214,7 @@ function parsedObjectToPackable(obj: ParsedObject): PackableObject | null {
   if (obj.type === 1) return { type: "commit", data: obj.data, hash: obj.hash };
   if (obj.type === 2) return { type: "tree", data: obj.data, hash: obj.hash };
   if (obj.type === 3) return { type: "blob", data: obj.data, hash: obj.hash };
+  if (obj.type === 4) return { type: "tag", data: obj.data, hash: obj.hash };
   return null;
 }
 
@@ -1139,8 +1140,9 @@ export class GitHttpClient {
    * Fetch raw, packable objects reachable from a commit.
    *
    * Browser PR merges cannot assume the target Grasp server already has the PR
-   * author's fork commits. This returns full commit/tree/blob objects that can
-   * be included in the receive-pack request with the new merge commit.
+   * author's fork commits. This returns full commit/tree/blob/tag objects that
+   * can be included in the receive-pack request with the new merge commit or
+   * preserved annotated tags.
    */
   async fetchPackableObjects(
     url: string,

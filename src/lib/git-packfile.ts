@@ -40,6 +40,7 @@ const OBJECT_TYPE = {
   commit: 1,
   tree: 2,
   blob: 3,
+  tag: 4,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -48,8 +49,8 @@ const OBJECT_TYPE = {
 
 /** A git object ready to be packed into a packfile. */
 export interface PackableObject {
-  /** Object type: "blob" | "tree" | "commit" */
-  type: "blob" | "tree" | "commit";
+  /** Object type: "blob" | "tree" | "commit" | "tag" */
+  type: "blob" | "tree" | "commit" | "tag";
   /** The raw object content (WITHOUT the `type size\0` header — just the content portion). */
   data: Uint8Array;
   /** The 40-char hex SHA-1 hash of the full git object (with header). */
@@ -68,7 +69,7 @@ export interface PackableObject {
  *     size, bit 7 = continuation flag
  *   - Subsequent bytes: bits 6-0 = next 7 bits of size, bit 7 = continuation
  *
- * @param type - Packfile object type number (1=commit, 2=tree, 3=blob)
+ * @param type - Packfile object type number (1=commit, 2=tree, 3=blob, 4=tag)
  * @param size - Uncompressed object size in bytes
  * @returns The encoded varint bytes
  */

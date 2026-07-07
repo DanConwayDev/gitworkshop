@@ -34,7 +34,6 @@ import {
   type RefUpdate,
 } from "@/lib/git-push";
 import { assertFastForwardSafe } from "@/lib/patch-merge";
-import { getStateRefs } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,7 +56,16 @@ export interface PushDeliverySummary {
 /** A ref the servers should advertise after the push completes. */
 export interface DesiredStateRef {
   refName: string;
+  /**
+   * The exact object ID the ref must point to. Annotated tags use the tag
+   * object ID, not the peeled commit.
+   */
   commitHash: string;
+  /**
+   * The peeled commit hash for annotated tags, when the state event declares
+   * one via ref^{}.
+   */
+  peeledCommitHash?: string;
 }
 
 /**
@@ -68,6 +76,7 @@ export interface DesiredStateRef {
 export type CatchUpObjectFetcher = (
   tipCommitId: string,
   stopAtCommitId: string,
+  includeObjectIds?: string[],
 ) => Promise<PackableObject[] | null>;
 
 /**
@@ -170,7 +179,14 @@ async function getAdvertisedRefs(
   }
 }
 
-function getComparableAdvertisedRef(
+function getAdvertisedRef(
+  refs: Record<string, string>,
+  refName: string,
+): string | undefined {
+  return refs[refName];
+}
+
+function getPeeledAdvertisedRef(
   refs: Record<string, string>,
   refName: string,
 ): string | undefined {
@@ -189,7 +205,23 @@ function refsMatch(
   refName: string,
   expectedHash: string,
 ): boolean {
-  return getComparableAdvertisedRef(refs, refName) === expectedHash;
+  return getAdvertisedRef(refs, refName) === expectedHash;
+}
+
+function getRawStateRefs(stateEvent: NostrEvent): DesiredStateRef[] {
+  const peeled = new Map<string, string>();
+  for (const [name, hash] of stateEvent.tags) {
+    if (name?.endsWith("^{}") && hash) peeled.set(name.slice(0, -3), hash);
+  }
+
+  return stateEvent.tags
+    .filter(([name]) => name?.startsWith("refs/") && !name.endsWith("^{}"))
+    .map(([refName, commitHash]) => ({
+      refName,
+      commitHash: commitHash ?? "",
+      peeledCommitHash: peeled.get(refName),
+    }))
+    .filter(({ commitHash }) => commitHash);
 }
 
 /**
@@ -200,19 +232,22 @@ export function getPostPushStateRefs(
   stateEvent: NostrEvent | null | undefined,
   primaryUpdate: RefUpdate,
 ): DesiredStateRef[] {
-  const refs = new Map<string, string>();
+  const refs = new Map<string, DesiredStateRef>();
 
   if (stateEvent) {
-    for (const ref of getStateRefs(stateEvent)) {
-      refs.set(ref.name, ref.commitId);
+    for (const ref of getRawStateRefs(stateEvent)) {
+      refs.set(ref.refName, ref);
     }
   }
 
-  refs.set(primaryUpdate.refName, primaryUpdate.newHash);
+  refs.set(primaryUpdate.refName, {
+    refName: primaryUpdate.refName,
+    commitHash: primaryUpdate.newHash,
+  });
 
-  return [...refs]
-    .filter(([, commitHash]) => commitHash !== ZERO_HASH)
-    .map(([refName, commitHash]) => ({ refName, commitHash }));
+  return [...refs.values()].filter(
+    ({ commitHash }) => commitHash !== ZERO_HASH,
+  );
 }
 
 async function serverRefsMatch(
@@ -242,7 +277,7 @@ export async function pushToGraspServer(
   // not necessarily what this server has.
   const advertisedRefs = await getAdvertisedRefs(cloneUrl);
   const serverHead = advertisedRefs
-    ? getComparableAdvertisedRef(advertisedRefs, refUpdate.refName)
+    ? getAdvertisedRef(advertisedRefs, refUpdate.refName)
     : null;
 
   const missingStateRefUpdates: RefUpdate[] = advertisedRefs
@@ -313,10 +348,17 @@ export async function pushToGraspServer(
 
     if (advertisedRefs) {
       for (const update of missingStateRefUpdates) {
-        const existingHash = getComparableAdvertisedRef(
+        const existingHash = getPeeledAdvertisedRef(
           advertisedRefs,
           update.refName,
         );
+        const desiredRef = ctx.desiredRefs.find(
+          ({ refName }) => refName === update.refName,
+        );
+        const tipCommitId = desiredRef?.peeledCommitHash ?? update.newHash;
+        const includeObjectIds = desiredRef?.peeledCommitHash
+          ? [update.newHash]
+          : undefined;
 
         if (
           !advertisedRefsContainHash(advertisedRefs, update.newHash) &&
@@ -326,8 +368,9 @@ export async function pushToGraspServer(
           )
         ) {
           const catchUp = await ctx.fetchCatchUpObjects(
-            update.newHash,
+            tipCommitId,
             existingHash ?? "",
+            includeObjectIds,
           );
 
           if (!catchUp) {

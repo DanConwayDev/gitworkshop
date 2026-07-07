@@ -1457,6 +1457,32 @@ export class GitGraspPool {
     );
   }
 
+  /** Fetch raw, packable objects for a specific advertised git object. */
+  async getPackableObjectsForObject(
+    objectHash: string,
+    signal: AbortSignal,
+    fallbackUrls?: string[],
+  ): Promise<PackableObject[] | null> {
+    return this.withFallback(
+      signal,
+      async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchPackableObjects(
+          url,
+          objectHash,
+          1,
+          signal,
+        );
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+        }
+        return result;
+      },
+      fallbackUrls,
+    );
+  }
+
   /**
    * Push one ref update (plus any state-event refs a server is missing) to
    * the given Grasp servers, in parallel, tolerating lagging mirrors.
@@ -1490,16 +1516,43 @@ export class GitGraspPool {
       objects,
       refUpdate,
       currentStateEvent: options.currentStateEvent,
-      fetchCatchUpObjects: (tipCommitId, stopAtCommitId) => {
+      fetchCatchUpObjects: async (
+        tipCommitId,
+        stopAtCommitId,
+        includeObjectIds,
+      ) => {
         if (!tipCommitId || tipCommitId === ZERO_HASH) {
           return Promise.resolve(null);
         }
-        return this.getPackableObjectsForCommitRange(
+        const signal = options.signal ?? new AbortController().signal;
+        const objects = await this.getPackableObjectsForCommitRange(
           tipCommitId,
           stopAtCommitId,
-          options.signal ?? new AbortController().signal,
+          signal,
           options.fallbackUrls,
         );
+        if (!objects || !includeObjectIds || includeObjectIds.length === 0) {
+          return objects;
+        }
+
+        const fetchedObjects = [...objects];
+        for (const objectId of includeObjectIds) {
+          if (fetchedObjects.some((object) => object.hash === objectId)) {
+            continue;
+          }
+
+          const extraObjects = await this.getPackableObjectsForObject(
+            objectId,
+            signal,
+            options.fallbackUrls,
+          );
+          if (!extraObjects?.some((object) => object.hash === objectId)) {
+            return null;
+          }
+          fetchedObjects.push(...extraObjects);
+        }
+
+        return fetchedObjects;
       },
     });
   }
