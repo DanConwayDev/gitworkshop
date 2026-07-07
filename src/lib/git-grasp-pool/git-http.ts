@@ -1263,10 +1263,9 @@ export class GitHttpClient {
    *     running concurrently), all callers share the single in-flight promise
    *     instead of each launching an identical HTTP request.
    *  3. Network fetch — fetchDirectoryTree with deepen=1 and a standalone
-   *     AbortController that is never aborted.  fetchPackfile does not honour
-   *     AbortSignal, so the request always runs to completion regardless; using
-   *     a long-lived signal ensures the result is cached and shared even if the
-   *     caller that initiated the fetch aborts before it finishes.
+   *     AbortController that is never aborted. This shared raw-object warmup is
+   *     intentionally allowed to complete and populate the cache even if the
+   *     caller that initiated it aborts before it finishes.
    *
    * Each caller checks its own signal after awaiting this method.
    */
