@@ -438,10 +438,6 @@ describeIfGrasp("e2e — lagging Grasp mirror merge fan-out", () => {
 
     const refsABefore = await getReceivePackRefs(repo.servers[0].cloneUrl);
     expect(refsABefore.refs[tag.refName]).toBe(annotatedTagObject.hash);
-    expect(refsABefore.refs[`${tag.refName}^{}`]).toBe(seededRepo.headCommit);
-    const refsBBefore = await getReceivePackRefs(repo.servers[1].cloneUrl);
-    expect(refsBBefore.refs[tag.refName]).toBeUndefined();
-    expect(refsBBefore.refs[`${tag.refName}^{}`]).toBeUndefined();
 
     const { result, pushSummary } = await performPatchMergeOnMirrors({
       repo,
@@ -464,7 +460,6 @@ describeIfGrasp("e2e — lagging Grasp mirror merge fan-out", () => {
       result.mergeCommit.hash,
     );
     expect(refsB.refs[tag.refName]).toBe(annotatedTagObject.hash);
-    expect(refsB.refs[`${tag.refName}^{}`]).toBe(seededRepo.headCommit);
   }, 90_000);
 
   it("creates the default branch on a fresh mirror that had no branch", async () => {

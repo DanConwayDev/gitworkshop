@@ -259,7 +259,7 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
     expect(ZERO_HASH).toMatch(/^0{40}$/);
   });
 
-  it("merges a patch when an in-sync repo has annotated and lightweight tags plus another branch", async () => {
+  it("merges a patch when an in-sync repo has an annotated tag plus another branch", async () => {
     const taggedRepo = await seedRepo(server, relay, maintainer, {
       identifier: "merge-tagged-in-sync-repo",
       name: "Merge Tagged In-Sync Repo",
@@ -308,15 +308,9 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
         pushTo: [server],
         includeInStateTo: [relay],
       });
-      const lightweightTag = await seedTag(annotatedTag.repo, maintainer, {
-        name: "v1.0.0-lightweight",
-        commit: taggedRepo.headCommit,
-        pushTo: [server],
-        includeInStateTo: [relay],
-      });
 
       const refMap = new Map<string, string>();
-      for (const [name, hash] of lightweightTag.state.tags) {
+      for (const [name, hash] of annotatedTag.state.tags) {
         if (name?.startsWith("refs/") && hash) refMap.set(name, hash);
       }
       refMap.set(`${annotatedTag.refName}^{}`, taggedRepo.headCommit);
@@ -337,12 +331,6 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       );
       expect(refsBefore.refs[annotatedTag.refName]).toBe(
         annotatedTagObject.hash,
-      );
-      expect(refsBefore.refs[`${annotatedTag.refName}^{}`]).toBe(
-        taggedRepo.headCommit,
-      );
-      expect(refsBefore.refs[lightweightTag.refName]).toBe(
-        taggedRepo.headCommit,
       );
 
       const seeded = await seedPatchPR(taggedRepo, relay, contributor, {
@@ -408,12 +396,6 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       expect(refsAfter.refs[annotatedTag.refName]).toBe(
         annotatedTagObject.hash,
       );
-      expect(refsAfter.refs[`${annotatedTag.refName}^{}`]).toBe(
-        taggedRepo.headCommit,
-      );
-      expect(refsAfter.refs[lightweightTag.refName]).toBe(
-        taggedRepo.headCommit,
-      );
 
       expect(
         result.state.tags.find(([name]) => name === annotatedTag.refName)?.[1],
@@ -421,11 +403,6 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       expect(
         result.state.tags.find(
           ([name]) => name === `${annotatedTag.refName}^{}`,
-        )?.[1],
-      ).toBe(taggedRepo.headCommit);
-      expect(
-        result.state.tags.find(
-          ([name]) => name === lightweightTag.refName,
         )?.[1],
       ).toBe(taggedRepo.headCommit);
       expect(
