@@ -83,8 +83,11 @@ import { pool as relayPool, eventStore } from "@/services/nostr";
 import { outboxStore } from "@/services/outbox";
 
 import type { CommitPerson } from "@/lib/git-objects";
+import type { PackableObject } from "@/lib/git-packfile";
 import type { Patch } from "@/casts/Patch";
 import type { ResolvedRepo, ResolvedPR } from "@/lib/nip34";
+
+const PR_BRANCH_OBJECT_FETCH_TIMEOUT_MS = 90_000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -198,6 +201,40 @@ async function publishToGraspRelays(
       .map((r) => `${r.from}: ${r.message ?? "rejected"}`)
       .join("; ");
     throw new Error(`All Grasp relays rejected the state event: ${reasons}`);
+  }
+}
+
+async function fetchPRBranchObjectsWithTimeout(
+  gitPool: GitGraspPool,
+  tipCommitHash: string,
+  stopAtCommitHash: string,
+  fallbackUrls: string[],
+): Promise<PackableObject[] | null> {
+  const abort = new AbortController();
+  let timedOut = false;
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    abort.abort();
+  }, PR_BRANCH_OBJECT_FETCH_TIMEOUT_MS);
+
+  try {
+    const objects = await gitPool.getPackableObjectsForCommitRange(
+      tipCommitHash,
+      stopAtCommitHash,
+      abort.signal,
+      fallbackUrls,
+    );
+
+    if (timedOut) {
+      throw new Error(
+        "Timed out while fetching PR branch objects from the git server. " +
+          "Try again, or merge locally with ngit if the server remains slow.",
+      );
+    }
+
+    return objects;
+  } finally {
+    globalThis.clearTimeout(timeout);
   }
 }
 
@@ -710,10 +747,10 @@ export function MergePanel({
         rootEventId: pr.rootEvent.id,
         rootAuthorPubkey: pr.pubkey,
         fetchBranchObjects: (tipCommitHash, stopAtCommitHash) =>
-          gitPool.getPackableObjectsForCommitRange(
+          fetchPRBranchObjectsWithTimeout(
+            gitPool,
             tipCommitHash,
             stopAtCommitHash,
-            new AbortController().signal,
             effectiveCloneUrls,
           ),
         ...transports,

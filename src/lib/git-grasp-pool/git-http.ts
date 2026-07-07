@@ -289,7 +289,7 @@ async function fetchObject(
   if (signal.aborted) return undefined;
   const caps = selectCapabilities(serverCaps);
   const want = createWantRequest(hash, caps, 1);
-  const result = await fetchPackfile(effectiveUrl, want);
+  const result = await fetchPackfile(effectiveUrl, want, signal);
   if (signal.aborted) return undefined;
   return result.objects.get(hash);
 }
@@ -311,7 +311,7 @@ async function fetchCommitsOnly(
     throw new Error("git server does not support filter capability");
   caps.push("filter");
   const want = createWantRequest(commitHash, caps, maxCommits, "tree:0");
-  const result = await fetchPackfile(effectiveUrl, want);
+  const result = await fetchPackfile(effectiveUrl, want, signal);
   if (signal.aborted) return [];
   const commits: Commit[] = [];
   for (const [hash, obj] of result.objects) {
@@ -355,7 +355,7 @@ async function fetchDirectoryTree(
   // objects for that commit, so parseDepth independently controls how much
   // of those objects loadTree() builds into the in-memory structure.
   const want = createWantRequest(commitHash, caps, 1, "blob:none");
-  const result = await fetchPackfile(effectiveUrl, want);
+  const result = await fetchPackfile(effectiveUrl, want, signal);
   if (signal.aborted) throw new Error("aborted");
 
   const commitObj = result.objects.get(commitHash);
@@ -385,7 +385,7 @@ async function shallowClone(
   if (signal.aborted) throw new Error("aborted");
   const caps = selectCapabilities(serverCaps);
   const want = createWantRequest(commitHash, caps, 1);
-  const result = await fetchPackfile(effectiveUrl, want);
+  const result = await fetchPackfile(effectiveUrl, want, signal);
   if (signal.aborted) throw new Error("aborted");
 
   const commitObj = result.objects.get(commitHash);
@@ -999,7 +999,7 @@ export class GitHttpClient {
       // deepen=1: fetch only the tip commit (server still sends all its trees)
       // blob:none: no file content, only tree objects
       const want = createWantRequest(commitHash, caps, 1, "blob:none");
-      const result = await fetchPackfile(effectiveUrl, want);
+      const result = await fetchPackfile(effectiveUrl, want, signal);
       if (signal.aborted) return null;
 
       const commitObj = result.objects.get(commitHash);
@@ -1149,6 +1149,7 @@ export class GitHttpClient {
     commitHash: string,
     maxCommits: number,
     signal: AbortSignal,
+    haveCommitIds: string[] = [],
   ): Promise<PackableObject[] | null> {
     const effectiveUrl = this.cors.resolveUrl(url);
     const serverCaps = await this.getServerCaps(url, signal);
@@ -1156,8 +1157,14 @@ export class GitHttpClient {
 
     try {
       const caps = selectCapabilities(serverCaps);
-      const want = createWantRequest(commitHash, caps, maxCommits);
-      const result = await fetchPackfile(effectiveUrl, want);
+      const want = createWantRequest(
+        commitHash,
+        caps,
+        haveCommitIds.length > 0 ? undefined : maxCommits,
+        undefined,
+        haveCommitIds,
+      );
+      const result = await fetchPackfile(effectiveUrl, want, signal);
       if (signal.aborted) return null;
 
       const objects: PackableObject[] = [];
