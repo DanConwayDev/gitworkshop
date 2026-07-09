@@ -373,10 +373,9 @@ function CILogViewer({
   }, [visibleLog]);
 
   useEffect(() => {
-    const node = containerRef.current;
-    if (!node || node.scrollTop > LOG_TOP_THRESHOLD_PX || fullLogError) return;
+    if (!isTailOnly || fullLogError) return;
     void loadFullLog();
-  }, [fullLogError, loadFullLog]);
+  }, [fullLogError, isTailOnly, loadFullLog]);
 
   return (
     <div
@@ -415,8 +414,8 @@ function CILogViewer({
             </span>
           ) : logUrl ? (
             <span>
-              Earlier log output omitted ({parsed.omittedBytes} bytes). Scroll
-              to the top to load the full log.
+              Earlier log output omitted ({parsed.omittedBytes} bytes). Loading
+              the full log…
             </span>
           ) : (
             <span className="flex items-center gap-2 text-destructive">
