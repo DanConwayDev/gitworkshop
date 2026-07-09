@@ -45,7 +45,6 @@ interface CIChecksPanelProps {
 }
 
 const LOG_TAIL_PREFIX_RE = /^\[log-tail omitted=(\d+)\]\n/;
-const LOG_TOP_THRESHOLD_PX = 4;
 
 function parseLogTail(content: string): {
   log: string;
@@ -283,6 +282,8 @@ function CILogViewer({
 
   const visibleLog = fullLog ?? parsed.log;
   const isTailOnly = parsed.omittedBytes !== undefined && fullLog === undefined;
+  const hasFullLogNotice =
+    isTailOnly || isLoadingFullLog || fullLogError !== undefined;
 
   useLayoutEffect(() => {
     didInitialPositionRef.current = false;
@@ -304,7 +305,7 @@ function CILogViewer({
   }, [log, logUrl]);
 
   const loadFullLog = useCallback(async () => {
-    if (!isTailOnly || isLoadingFullLog || !logUrl) return;
+    if (fullLog !== undefined || isLoadingFullLog || !logUrl) return;
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -334,8 +335,9 @@ function CILogViewer({
     } catch (error) {
       if (controller.signal.aborted) return;
       const reason = error instanceof Error ? error.message : "Unknown error";
+      const savedLogDescription = isTailOnly ? "tail" : "log output";
       setFullLogError(
-        `Full log is no longer available. Showing the saved tail. (${reason})`,
+        `Full log is no longer available. Showing the saved ${savedLogDescription}. (${reason})`,
       );
     } finally {
       if (!controller.signal.aborted) {
@@ -343,13 +345,7 @@ function CILogViewer({
         abortRef.current = null;
       }
     }
-  }, [isLoadingFullLog, isTailOnly, logUrl]);
-
-  const handleScroll = useCallback(() => {
-    const node = containerRef.current;
-    if (!node || node.scrollTop > LOG_TOP_THRESHOLD_PX || fullLogError) return;
-    void loadFullLog();
-  }, [fullLogError, loadFullLog]);
+  }, [fullLog, isLoadingFullLog, isTailOnly, logUrl]);
 
   useLayoutEffect(() => {
     const node = containerRef.current;
@@ -373,20 +369,19 @@ function CILogViewer({
   }, [visibleLog]);
 
   useEffect(() => {
-    if (!isTailOnly || fullLogError) return;
+    if (!logUrl || fullLog !== undefined || fullLogError) return;
     void loadFullLog();
-  }, [fullLogError, isTailOnly, loadFullLog]);
+  }, [fullLog, fullLogError, loadFullLog, logUrl]);
 
   return (
     <div
       ref={containerRef}
-      onScroll={handleScroll}
       className={cn(
         "max-h-64 overflow-auto border-t border-border/60 bg-muted/50",
         "font-mono text-[11px] leading-relaxed",
       )}
     >
-      {isTailOnly && (
+      {hasFullLogNotice && (
         <div
           ref={noticeRef}
           className="border-b border-border/60 bg-muted/95 px-3 py-2 font-sans text-xs text-muted-foreground"
@@ -412,11 +407,13 @@ function CILogViewer({
                 </button>
               )}
             </span>
-          ) : logUrl ? (
+          ) : isTailOnly && logUrl ? (
             <span>
               Earlier log output omitted ({parsed.omittedBytes} bytes). Loading
               the full log…
             </span>
+          ) : logUrl ? (
+            <span>Loading full log…</span>
           ) : (
             <span className="flex items-center gap-2 text-destructive">
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />
