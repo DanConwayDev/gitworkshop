@@ -1,18 +1,21 @@
 /**
- * ngit-ci CI workflow events (experimental kinds 9841 / 9842).
+ * ngit-ci CI workflow events (experimental kinds 9841 / 9842 / 39842).
  *
- * Kind 9841 — "CI Workflow Started": optional, temporary running indicator
- * with a NIP-40 expiration. Fetched repo-wide via the #a coordinate filter
- * (they expire, so the set stays small).
+ * Kind 9841 — "CI Job Result": one job's result, signed by the compute
+ * provider. Content is a small log tail, with the full log in a `logs` tag.
  *
- * Kind 9842 — "CI Workflow Result": independent attestation of a workflow /
- * job outcome, signed by the runner/coordinator identity. For PR-triggered
- * workflows both kinds carry NIP-22-style #E (PR root) and #e (PR or PR
- * Update trigger) tags, so results for a PR are fetched via #E alongside
- * comments. For commit status ticks (CodeBar, commit history, commit page)
- * results are fetched by #c for the commits being displayed via the batched
- * ciResultsByCommitLoader singleton. The repo Actions tab fetches all
- * results repo-wide by #a on demand (useRepoCI).
+ * Kind 9842 — "CI Workflow Result": combined outcome of a workflow run,
+ * signed by the coordinator and quoting each job result with `q` tags.
+ *
+ * Kind 39842 — "CI Workflow Progress": addressable, expiring progress marker
+ * for queued/in-progress/recently-concluded runs.
+ *
+ * For PR-triggered workflows all three kinds carry NIP-22-style #E (PR root)
+ * and #e (PR or PR Update trigger) tags, so CI activity for a PR is fetched
+ * via #E alongside comments. For commit status ticks (CodeBar, commit history,
+ * commit page) events are fetched by #c for the commits being displayed via
+ * the batched ciResultsByCommitLoader singleton. The repo Actions tab fetches
+ * all CI activity repo-wide by #a on demand (useRepoCI).
  *
  * Multi-maintainer repos are announced under one coordinate per maintainer,
  * so CI events may carry multiple `a` tags — one per coordinate. All #a
@@ -21,38 +24,62 @@
  * are found.
  *
  * Trust model: none yet — all CI events are displayed regardless of signer.
- * The runner identity is always shown next to results so users can judge for
- * themselves. A proper trust model (maintainer-designated runners, follows)
- * can be layered on later if spam appears.
+ * The signer identity is always shown next to results so users can judge for
+ * themselves. A proper trust model (maintainer-designated coordinators/runners,
+ * follows) can be layered on later if spam appears.
  *
  * See ngit-ci's NIP.md for the full event shapes.
  */
 
 import type { CIRun } from "@/casts/CIRun";
+import type { CIJobResultEvent } from "@/casts/CIJobResult";
 import type { CIResult } from "@/casts/CIResult";
 
-/** Kind 9841 — CI workflow started (temporary running indicator). */
-export const CI_RUN_KIND = 9841;
+/** Kind 9841 — CI job result. */
+export const CI_JOB_RESULT_KIND = 9841;
 
 /** Kind 9842 — CI workflow result. */
 export const CI_RESULT_KIND = 9842;
 
-/** Status values a kind:9842 result can carry. */
-export type CIResultStatus = "success" | "failure" | "error" | "skipped";
+/** Kind 39842 — CI workflow progress (temporary addressable marker). */
+export const CI_RUN_KIND = 39842;
 
-/** A check's display status — a result status or a pending running marker. */
+/** All ngit-ci event kinds. */
+export const CI_EVENT_KINDS = [
+  CI_JOB_RESULT_KIND,
+  CI_RESULT_KIND,
+  CI_RUN_KIND,
+] as const;
+
+/** Conclusion values ngit-ci reports, aligned with GitHub's conclusion field. */
+export type CIConclusion =
+  | "success"
+  | "failure"
+  | "neutral"
+  | "cancelled"
+  | "skipped"
+  | "timed_out"
+  | "startup_failure";
+
+/** Status values a completed check can carry. */
+export type CIResultStatus = CIConclusion;
+
+/** A check's display status — a result status or a pending progress marker. */
 export type CICheckStatus = CIResultStatus | "pending";
 
-/** Normalize a raw `status` tag value; unknown values are treated as error. */
-export function normalizeCIStatus(raw: string | undefined): CIResultStatus {
+/** Normalize a raw `conclusion` tag value; unknown values are startup failures. */
+export function normalizeCIConclusion(raw: string | undefined): CIResultStatus {
   switch (raw) {
     case "success":
     case "failure":
-    case "error":
+    case "neutral":
+    case "cancelled":
     case "skipped":
+    case "timed_out":
+    case "startup_failure":
       return raw;
     default:
-      return "error";
+      return "startup_failure";
   }
 }
 
@@ -65,41 +92,40 @@ export interface CIJobResult {
   /** Job identity from the `job` tag (falls back to the workflow path). */
   jobId: string;
   status: CIResultStatus;
-  /** The cast result event carrying logs, duration, exit code, etc. */
-  result: CIResult;
+  /** The cast job result event carrying logs, duration, exit code, etc. */
+  result: CIJobResultEvent;
 }
 
 /**
  * A workflow run group — all CI events sharing the same
- * (runner pubkey, commit, workflow path).
+ * (coordinator/runner pubkey, commit, workflow path).
  */
 export interface CIWorkflowRun {
   /** Stable grouping key: `${pubkey}|${commitId}|${workflowPath}` */
   key: string;
-  /** The runner / coordinator identity that signed the events. */
+  /** The coordinator / runner identity that signed the workflow/progress. */
   pubkey: string;
   /** Commit the workflow ran against (`c` tag). */
   commitId: string | undefined;
   /** Selected workflow file path (`w` tag). */
   workflowPath: string | undefined;
-  /** Normalized trigger name (`x` tag): push | pull_request | manual | schedule */
+  /** Normalized trigger name (`o` tag): push | pull_request | manual | schedule */
   trigger: string | undefined;
-  /** Optional runner name tag. */
+  /** Optional runner/provider name tag, when a publisher includes one. */
   runner: string | undefined;
-  /** Optional platform tag (github-actions | forgejo-actions | gitlab-ci). */
+  /** Optional platform tag, when a publisher includes one. */
   platform: string | undefined;
   /** Push trigger branch ref (`r` tag, e.g. refs/heads/main), when present. */
   branchRef: string | undefined;
   /** Root PR event id (`E` tag) for PR-triggered workflows, when present. */
   prRootId: string | undefined;
-  /** Latest result per job id, sorted by job id. */
+  /** Latest completed result per job id, sorted by job id. */
   jobs: CIJobResult[];
-  /**
-   * An unexpired kind:9841 running marker newer than every result in the
-   * group — the workflow is (re-)running right now.
-   */
+  /** Jobs currently executing according to the latest progress marker. */
+  inProgressJobs: string[];
+  /** An unexpired queued/in-progress kind:39842 marker newer than the result. */
   pendingRun: CIRun | undefined;
-  /** Rolled-up status across jobs + pending marker. */
+  /** Rolled-up status across workflow result, jobs, and progress marker. */
   status: CICheckStatus;
   /** Unix seconds of the most recent event in the group. */
   createdAt: number;
@@ -107,17 +133,21 @@ export interface CIWorkflowRun {
 
 /**
  * Roll up multiple check statuses into one.
- * Precedence: error > failure > pending > success > skipped.
+ * Precedence: startup_failure > timed_out > failure > pending > cancelled >
+ * success > neutral > skipped.
  * Returns undefined for an empty list.
  */
 export function rollupCIStatuses(
   statuses: CICheckStatus[],
 ): CICheckStatus | undefined {
   if (statuses.length === 0) return undefined;
-  if (statuses.includes("error")) return "error";
+  if (statuses.includes("startup_failure")) return "startup_failure";
+  if (statuses.includes("timed_out")) return "timed_out";
   if (statuses.includes("failure")) return "failure";
   if (statuses.includes("pending")) return "pending";
+  if (statuses.includes("cancelled")) return "cancelled";
   if (statuses.includes("success")) return "success";
+  if (statuses.includes("neutral")) return "neutral";
   return "skipped";
 }
 
@@ -132,20 +162,24 @@ function groupKey(
 /**
  * Group CI casts into workflow runs.
  *
- * - Expired kind:9841 markers (NIP-40) are dropped.
- * - Within a group, only the latest kind:9842 per job id is kept.
- * - A 9841 marker counts as pending only when it is newer than every result
- *   in its group (a re-run after previous results shows as pending again).
+ * - Expired kind:39842 progress markers (NIP-40) are dropped.
+ * - Within a group, only the latest kind:9841 per job id is kept.
+ * - Kind:9842 workflow results provide the authoritative combined conclusion.
+ * - A queued/in-progress marker counts as pending only when newer than every
+ *   workflow result in its group (a re-run after previous results shows as
+ *   pending again).
  *
  * Returned runs are sorted most-recent-first.
  *
- * @param runs    - Cast kind:9841 events
- * @param results - Cast kind:9842 events
- * @param nowSecs - Current unix time in seconds (for expiration checks)
+ * @param runs       - Cast kind:39842 events
+ * @param results    - Cast kind:9842 events
+ * @param jobResults - Cast kind:9841 events
+ * @param nowSecs    - Current unix time in seconds (for expiration checks)
  */
 export function groupCIWorkflowRuns(
   runs: CIRun[],
   results: CIResult[],
+  jobResults: CIJobResultEvent[],
   nowSecs: number = Math.floor(Date.now() / 1000),
 ): CIWorkflowRun[] {
   interface Group {
@@ -158,15 +192,17 @@ export function groupCIWorkflowRuns(
     platform: string | undefined;
     branchRef: string | undefined;
     prRootId: string | undefined;
-    latestPerJob: Map<string, CIResult>;
+    latestPerJob: Map<string, CIJobResultEvent>;
+    latestWorkflowResult: CIResult | undefined;
     latestResultAt: number;
     pendingRun: CIRun | undefined;
+    inProgressJobs: Set<string>;
     createdAt: number;
   }
 
   const groups = new Map<string, Group>();
 
-  const getGroup = (ev: CIRun | CIResult): Group => {
+  const getGroup = (ev: CIRun | CIResult | CIJobResultEvent): Group => {
     const key = groupKey(ev.pubkey, ev.commitId, ev.workflowPath);
     let group = groups.get(key);
     if (!group) {
@@ -181,13 +217,15 @@ export function groupCIWorkflowRuns(
         branchRef: ev.branchRef,
         prRootId: ev.prRootId,
         latestPerJob: new Map(),
+        latestWorkflowResult: undefined,
         latestResultAt: 0,
         pendingRun: undefined,
+        inProgressJobs: new Set(),
         createdAt: 0,
       };
       groups.set(key, group);
     }
-    // Fill optional context from whichever event carries it
+    // Fill optional context from whichever event carries it.
     group.trigger ??= ev.trigger;
     group.runner ??= ev.runner;
     group.platform ??= ev.platform;
@@ -197,12 +235,34 @@ export function groupCIWorkflowRuns(
     return group;
   };
 
+  const jobsById = new Map<string, CIJobResultEvent>();
+  for (const job of jobResults) jobsById.set(job.event.id, job);
+  const referencedJobIds = new Set<string>();
+
+  const addJobToGroup = (
+    group: Group,
+    job: CIJobResultEvent,
+    jobId: string,
+  ) => {
+    const existing = group.latestPerJob.get(jobId);
+    if (!existing || job.event.created_at > existing.event.created_at) {
+      group.latestPerJob.set(jobId, job);
+    }
+    group.latestResultAt = Math.max(group.latestResultAt, job.event.created_at);
+  };
+
   for (const result of results) {
     const group = getGroup(result);
-    const jobId = result.jobId;
-    const existing = group.latestPerJob.get(jobId);
-    if (!existing || result.event.created_at > existing.event.created_at) {
-      group.latestPerJob.set(jobId, result);
+    if (
+      !group.latestWorkflowResult ||
+      result.event.created_at > group.latestWorkflowResult.event.created_at
+    ) {
+      group.latestWorkflowResult = result;
+    }
+    for (const ref of result.jobRefs) {
+      referencedJobIds.add(ref.eventId);
+      const job = jobsById.get(ref.eventId);
+      if (job) addJobToGroup(group, job, ref.jobId ?? job.jobId);
     }
     group.latestResultAt = Math.max(
       group.latestResultAt,
@@ -218,7 +278,18 @@ export function groupCIWorkflowRuns(
       run.event.created_at > group.pendingRun.event.created_at
     ) {
       group.pendingRun = run;
+      group.inProgressJobs = new Set(run.inProgressJobs);
     }
+    for (const ref of run.jobRefs) {
+      referencedJobIds.add(ref.eventId);
+      const job = jobsById.get(ref.eventId);
+      if (job) addJobToGroup(group, job, ref.jobId ?? job.jobId);
+    }
+  }
+
+  for (const job of jobResults) {
+    if (referencedJobIds.has(job.event.id)) continue;
+    addJobToGroup(getGroup(job), job, job.jobId);
   }
 
   const out: CIWorkflowRun[] = [];
@@ -227,17 +298,22 @@ export function groupCIWorkflowRuns(
       .map(([jobId, result]) => ({ jobId, status: result.status, result }))
       .sort((a, b) => a.jobId.localeCompare(b.jobId));
 
-    // A running marker only counts as pending when newer than every result.
+    // A queued/in-progress marker only counts as pending when newer than the
+    // latest workflow result. Concluded progress markers are context only.
     const pendingRun =
       group.pendingRun &&
-      group.pendingRun.event.created_at > group.latestResultAt
+      group.pendingRun.isPending &&
+      group.pendingRun.event.created_at >
+        (group.latestWorkflowResult?.event.created_at ?? 0)
         ? group.pendingRun
         : undefined;
 
-    const statuses: CICheckStatus[] = jobs.map((j) => j.status);
-    if (pendingRun) statuses.push("pending");
-    const status = rollupCIStatuses(statuses);
-    if (status === undefined) continue; // empty group (expired run only)
+    const status = pendingRun
+      ? "pending"
+      : (group.latestWorkflowResult?.status ??
+        group.pendingRun?.conclusion ??
+        rollupCIStatuses(jobs.map((j) => j.status)));
+    if (status === undefined) continue; // empty group (expired progress only)
 
     out.push({
       key: group.key,
@@ -250,6 +326,7 @@ export function groupCIWorkflowRuns(
       branchRef: group.branchRef,
       prRootId: group.prRootId,
       jobs,
+      inProgressJobs: [...group.inProgressJobs].sort(),
       pendingRun,
       status,
       createdAt: group.createdAt,
@@ -300,10 +377,16 @@ export function ciStatusLabel(status: CICheckStatus): string {
       return "Successful";
     case "failure":
       return "Failing";
-    case "error":
-      return "Errored";
+    case "neutral":
+      return "Neutral";
+    case "cancelled":
+      return "Cancelled";
     case "skipped":
       return "Skipped";
+    case "timed_out":
+      return "Timed out";
+    case "startup_failure":
+      return "Startup failed";
     case "pending":
       return "In progress";
   }
@@ -332,10 +415,13 @@ export function summarizeRuns(runs: CIWorkflowRun[]): string {
     counts.set(run.status, (counts.get(run.status) ?? 0) + 1);
   }
   const order: CICheckStatus[] = [
-    "error",
+    "startup_failure",
+    "timed_out",
     "failure",
     "pending",
+    "cancelled",
     "success",
+    "neutral",
     "skipped",
   ];
   const parts: string[] = [];

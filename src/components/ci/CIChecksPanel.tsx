@@ -69,7 +69,9 @@ export function CIChecksPanel({ checks, className }: CIChecksPanelProps) {
                 run={run}
                 defaultOpen={
                   currentRuns.length === 1 &&
-                  (run.status === "failure" || run.status === "error")
+                  (run.status === "failure" ||
+                    run.status === "timed_out" ||
+                    run.status === "startup_failure")
                 }
               />
             ))}
@@ -171,6 +173,16 @@ export function CIRunRow({
             {run.jobs.map((job) => (
               <CIJobRow key={job.jobId} job={job} />
             ))}
+            {run.inProgressJobs.map((jobId) => (
+              <div
+                key={`progress-${jobId}`}
+                className="flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground"
+              >
+                <CIStatusIcon status="pending" className="h-3.5 w-3.5" />
+                <span className="truncate font-mono">{jobId}</span>
+                <span className="ml-auto shrink-0">in progress</span>
+              </div>
+            ))}
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -188,7 +200,7 @@ function CIJobRow({ job }: { job: CIJobResult }) {
     <div className="rounded-md border border-border/60">
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
         <CIStatusIcon status={job.status} className="h-3.5 w-3.5" />
-        <span className="truncate font-mono">{job.jobId}</span>
+        <span className="truncate font-mono">{result.name ?? job.jobId}</span>
         {result.exitCode !== undefined && result.exitCode !== 0 && (
           <span className="shrink-0 text-red-500">exit {result.exitCode}</span>
         )}

@@ -40,7 +40,7 @@ import {
   LEGACY_REPLY_KINDS,
   COVER_NOTE_KIND,
 } from "@/lib/nip34";
-import { CI_RUN_KIND, CI_RESULT_KIND } from "@/lib/ci";
+import { CI_EVENT_KINDS, CI_RUN_KIND } from "@/lib/ci";
 import { Repository, isValidRepository } from "@/casts/Repository";
 import {
   createPaginatedTagValueLoader,
@@ -550,7 +550,7 @@ export const nip05WarmupReady: Promise<void> = loadAllNip05FromIdb().then(
 //   Essentials (#e tag, bufferTime: 100ms): status (1630-1633), labels (1985),
 //   and deletions (5) for every item on the page.
 //   Comments (#E tag, bufferTime: 500ms): NIP-22 comments (1111), PR
-//   updates (1619), and CI results (9842). The longer buffer ensures
+//   updates (1619), and CI activity (9841/9842/39842). The longer buffer ensures
 //   essentials land first.
 //
 // Thread level — all child events, no kind restriction (detail pages only)
@@ -607,10 +607,9 @@ export const nip34EssentialsLoader = createPaginatedTagValueLoader(pool, "e", {
 
 /**
  * Comments loader (#E tag).
- * Fetches NIP-22 comments (kind 1111), PR updates (kind 1619), and CI
- * workflow results (kind 9842 — ngit-ci results tag the PR root via
- * NIP-22-style #E, so they ride along with comments and power the CI
- * check badges on PR lists).
+ * Fetches NIP-22 comments (kind 1111), PR updates (kind 1619), and ngit-ci
+ * activity (kinds 9841/9842/39842 — CI events tag the PR root via
+ * NIP-22-style #E, so they ride along with comments and power CI badges).
  * Uses the uppercase `E` root tag, so it needs its own loader instance
  * separate from the `#e` loaders. The longer buffer ensures essentials
  * land first.
@@ -618,7 +617,7 @@ export const nip34EssentialsLoader = createPaginatedTagValueLoader(pool, "e", {
 export const nip34CommentsLoader = createPaginatedTagValueLoader(pool, "E", {
   cacheRequest,
   eventStore,
-  kinds: [1111, 1619, CI_RESULT_KIND],
+  kinds: [1111, 1619, ...CI_EVENT_KINDS],
   bufferTime: NIP34_COMMENTS_BUFFER,
 });
 
@@ -650,14 +649,14 @@ export const nip34EssentialDeletionsLoader = createPaginatedTagValueLoader(
 /**
  * CI results-by-commit loader (#c tag).
  *
- * Fetches kind:9842 ngit-ci workflow results for specific commits — powers
+ * Fetches ngit-ci activity for specific commits — powers
  * the commit status ticks in the CodeBar commit summary row, the commit
  * history list, and the commit detail page. Callers fire it once per commit
  * they are about to display; calls within the buffer window are batched into
  * a single REQ per relay, so fetching CI for a page of commits costs one
  * subscription.
  *
- * Kind:9841 running markers are NOT fetched here — they arrive repo-wide via
+ * Kind:39842 progress markers also arrive repo-wide via
  * the #a coordinate filter in nip34RepoLoader's repo meta subscription (their
  * NIP-40 expiration keeps that set small) and are read back from the store
  * by #c when rolling up a commit's status.
@@ -668,7 +667,7 @@ export const ciResultsByCommitLoader = createPaginatedTagValueLoader(
   {
     cacheRequest,
     eventStore,
-    kinds: [CI_RESULT_KIND],
+    kinds: [...CI_EVENT_KINDS],
     bufferTime: CI_COMMIT_RESULTS_BUFFER,
   },
 );
@@ -1033,8 +1032,8 @@ export function nip34RepoLoader(
 
     const repoMetaFilters = [
       {
-        // Reactions (stars), follow lists, zaps — plus kind:9841 CI
-        // "workflow started" running markers. The markers carry a NIP-40
+        // Reactions (stars), follow lists, zaps — plus kind:39842 CI
+        // workflow progress markers. The markers carry a NIP-40
         // expiration so the live set for a repo stays small; fetching them
         // repo-wide via #a keeps pending indicators available everywhere
         // (PR lists, PR pages) without per-item subscriptions.

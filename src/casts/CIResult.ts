@@ -4,7 +4,7 @@ import { getTagValue, KnownEvent } from "applesauce-core/helpers/event";
 import type { NostrEvent } from "nostr-tools";
 import {
   CI_RESULT_KIND,
-  normalizeCIStatus,
+  normalizeCIConclusion,
   type CIResultStatus,
 } from "@/lib/ci";
 import { CIContextCast } from "./CIContext";
@@ -12,12 +12,9 @@ import { CIContextCast } from "./CIContext";
 type CIResultEvent = KnownEvent<typeof CI_RESULT_KIND>;
 
 // Cache symbols
-const JobIdSymbol = Symbol.for("ci-result-job-id");
 const StatusSymbol = Symbol.for("ci-result-status");
-const DurationSymbol = Symbol.for("ci-result-duration");
-const ExitCodeSymbol = Symbol.for("ci-result-exit-code");
-const LogUrlSymbol = Symbol.for("ci-result-log-url");
-const StageSymbol = Symbol.for("ci-result-stage");
+const StartedAtSymbol = Symbol.for("ci-result-started-at");
+const QueuedAtSymbol = Symbol.for("ci-result-queued-at");
 
 /** Validate that a raw event is a kind:9842 CI workflow result event. */
 export function isValidCIResult(event: NostrEvent): event is CIResultEvent {
@@ -25,9 +22,9 @@ export function isValidCIResult(event: NostrEvent): event is CIResultEvent {
 }
 
 /**
- * Cast wrapping a kind:9842 "CI Workflow Result" event — an independent
- * attestation of a workflow / job outcome signed by the runner identity.
- * The event `content` carries the captured log output (or a truncated tail).
+ * Cast wrapping a kind:9842 "CI Workflow Result" event — the combined outcome
+ * of one workflow run, signed by the coordinator. Individual job results are
+ * quoted with NIP-18 `q` tags and parsed by CIContextCast.jobRefs.
  */
 export class CIResult extends CIContextCast<CIResultEvent> {
   constructor(event: NostrEvent, store: CastRefEventStore) {
@@ -35,71 +32,35 @@ export class CIResult extends CIContextCast<CIResultEvent> {
     super(event, store);
   }
 
-  /**
-   * Job identity from the `job` tag. Backends that only report a
-   * workflow-level result use the workflow path, so fall back to it.
-   */
-  get jobId(): string {
-    return getOrComputeCachedValue(
-      this.event,
-      JobIdSymbol,
-      () => getTagValue(this.event, "job") ?? this.workflowPath ?? "(workflow)",
-    );
-  }
-
-  /** Result status — unknown values are normalized to "error". */
+  /** Workflow conclusion. */
   get status(): CIResultStatus {
     return getOrComputeCachedValue(this.event, StatusSymbol, () =>
-      normalizeCIStatus(getTagValue(this.event, "status")),
+      normalizeCIConclusion(getTagValue(this.event, "conclusion")),
     );
   }
 
-  /**
-   * Execution duration in seconds. Prefers the `duration` tag, falls back
-   * to the higher-precision `duration_ms` compatibility tag.
-   */
-  get duration(): number | undefined {
-    return getOrComputeCachedValue(this.event, DurationSymbol, () => {
-      const secs = getTagValue(this.event, "duration");
-      if (secs !== undefined) {
-        const n = Number.parseFloat(secs);
-        if (Number.isFinite(n)) return n;
-      }
-      const ms = getTagValue(this.event, "duration_ms");
-      if (ms !== undefined) {
-        const n = Number.parseFloat(ms);
-        if (Number.isFinite(n)) return n / 1000;
-      }
-      return undefined;
-    });
-  }
-
-  /** Process exit code, when available. */
-  get exitCode(): number | undefined {
-    return getOrComputeCachedValue(this.event, ExitCodeSymbol, () => {
-      const raw = getTagValue(this.event, "exit_code");
+  /** Queue timestamp, when provided. */
+  get queuedAt(): number | undefined {
+    return getOrComputeCachedValue(this.event, QueuedAtSymbol, () => {
+      const raw = getTagValue(this.event, "queued_at");
       if (raw === undefined) return undefined;
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) ? n : undefined;
     });
   }
 
-  /** External full log location, when the log is stored elsewhere. */
-  get logUrl(): string | undefined {
-    return getOrComputeCachedValue(this.event, LogUrlSymbol, () =>
-      getTagValue(this.event, "log_url"),
-    );
+  /** Execution start timestamp, when provided. */
+  get startedAt(): number | undefined {
+    return getOrComputeCachedValue(this.event, StartedAtSymbol, () => {
+      const raw = getTagValue(this.event, "started_at");
+      if (raw === undefined) return undefined;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) ? n : undefined;
+    });
   }
 
-  /** Stage name for backends that expose stages. */
-  get stage(): string | undefined {
-    return getOrComputeCachedValue(this.event, StageSymbol, () =>
-      getTagValue(this.event, "stage"),
-    );
-  }
-
-  /** Captured log output (or truncated tail / summary). */
-  get log(): string {
+  /** Optional short human-readable summary. */
+  get summary(): string {
     return this.event.content;
   }
 }

@@ -20,9 +20,21 @@ const iconConfig: Record<
     icon: XCircle,
     className: "text-red-500",
   },
-  error: {
+  startup_failure: {
     icon: AlertTriangle,
     className: "text-red-500",
+  },
+  timed_out: {
+    icon: AlertTriangle,
+    className: "text-red-500",
+  },
+  neutral: {
+    icon: CircleSlash,
+    className: "text-muted-foreground",
+  },
+  cancelled: {
+    icon: CircleSlash,
+    className: "text-muted-foreground",
   },
   skipped: {
     icon: CircleSlash,

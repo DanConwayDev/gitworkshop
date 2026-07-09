@@ -1,5 +1,5 @@
 /**
- * Shared base cast for ngit-ci CI events (kinds 9841 / 9842).
+ * Shared base cast for ngit-ci CI events (kinds 9841 / 9842 / 39842).
  *
  * Both kinds carry the same common CI context tags:
  *   ["a", "30617:<owner>:<repo-id>"]  — repository coordinate. Multi-maintainer
@@ -7,9 +7,9 @@
  *                                       per maintainer, so CI events may carry
  *                                       multiple `a` tags — one per coordinate.
  *   ["c", "<commit-id>"]              — commit the workflow ran against
- *   ["w", "<workflow-path>"]          — selected workflow file path
- *   ["x", "<trigger>"]                — push | pull_request | manual | schedule
- *   ["runner", ...] / ["platform", ...] — optional runner metadata
+ *   ["w", "<workflow-path>", "<sha256>"] — selected workflow file path
+ *   ["o", "<trigger>"]                — push | pull_request | manual | schedule
+ *   ["runner", ...] / ["platform", ...] — optional legacy metadata
  *
  * Trigger context:
  *   push:      ["r", "refs/heads/<branch>"]
@@ -32,6 +32,14 @@ const PlatformSymbol = Symbol.for("ci-platform");
 const BranchRefSymbol = Symbol.for("ci-branch-ref");
 const PRRootIdSymbol = Symbol.for("ci-pr-root-id");
 const TriggerEventIdSymbol = Symbol.for("ci-trigger-event-id");
+const JobRefsSymbol = Symbol.for("ci-job-refs");
+
+export interface CIJobRef {
+  eventId: string;
+  relay: string | undefined;
+  pubkey: string | undefined;
+  jobId: string | undefined;
+}
 
 export abstract class CIContextCast<
   T extends NostrEvent = NostrEvent,
@@ -73,10 +81,12 @@ export abstract class CIContextCast<
     );
   }
 
-  /** Normalized trigger name (`x` tag). */
+  /** Normalized trigger name (`o` tag, legacy fallback `x`). */
   get trigger(): string | undefined {
-    return getOrComputeCachedValue(this.event, TriggerSymbol, () =>
-      getTagValue(this.event, "x"),
+    return getOrComputeCachedValue(
+      this.event,
+      TriggerSymbol,
+      () => getTagValue(this.event, "o") ?? getTagValue(this.event, "x"),
     );
   }
 
@@ -115,6 +125,20 @@ export abstract class CIContextCast<
   get triggerEventId(): string | undefined {
     return getOrComputeCachedValue(this.event, TriggerEventIdSymbol, () =>
       getTagValue(this.event, "e"),
+    );
+  }
+
+  /** NIP-18 `q` tags that quote completed CI job results. */
+  get jobRefs(): CIJobRef[] {
+    return getOrComputeCachedValue(this.event, JobRefsSymbol, () =>
+      this.event.tags
+        .filter(([name, eventId]) => name === "q" && !!eventId)
+        .map(([, eventId, relay, pubkey, jobId]) => ({
+          eventId,
+          relay,
+          pubkey,
+          jobId,
+        })),
     );
   }
 }

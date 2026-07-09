@@ -41,6 +41,7 @@ import type { NostrEvent } from "nostr-tools";
 import { combineLatest, timer, merge, EMPTY } from "rxjs";
 import { map, catchError } from "rxjs/operators";
 import { CIRun, isValidCIRun } from "@/casts/CIRun";
+import { CIJobResultEvent, isValidCIJobResult } from "@/casts/CIJobResult";
 import { CIResult, isValidCIResult } from "@/casts/CIResult";
 import { ciResultsByCommitLoader, pool } from "@/services/nostr";
 import {
@@ -53,6 +54,8 @@ import { relayGroupUrls$ } from "@/models/RepositoryRelayGroup";
 import {
   CI_RUN_KIND,
   CI_RESULT_KIND,
+  CI_JOB_RESULT_KIND,
+  CI_EVENT_KINDS,
   groupCIWorkflowRuns,
   splitRunsByCommit,
   rollupCIStatuses,
@@ -67,6 +70,7 @@ const EXPIRY_RECHECK_INTERVAL_MS = 30_000;
 function castAndGroupCIEvents(
   resultEvents: NostrEvent[],
   runEvents: NostrEvent[],
+  jobEvents: NostrEvent[],
   castStore: CastRefEventStore,
 ): CIWorkflowRun[] {
   const results: CIResult[] = [];
@@ -87,7 +91,16 @@ function castAndGroupCIEvents(
       // Malformed event — skip
     }
   }
-  return groupCIWorkflowRuns(markers, results);
+  const jobs: CIJobResultEvent[] = [];
+  for (const ev of jobEvents) {
+    if (!isValidCIJobResult(ev)) continue;
+    try {
+      jobs.push(new CIJobResultEvent(ev, castStore));
+    } catch {
+      // Malformed event — skip
+    }
+  }
+  return groupCIWorkflowRuns(markers, results, jobs);
 }
 
 export interface PRCIChecks {
@@ -127,18 +140,23 @@ export function useCIForPR(
     const runMarkers$ = store.timeline([
       { kinds: [CI_RUN_KIND], "#E": [prRootId] } as Filter,
     ]);
+    const jobs$ = store.timeline([
+      { kinds: [CI_JOB_RESULT_KIND], "#E": [prRootId] } as Filter,
+    ]);
 
     // The timer re-runs grouping periodically so pending markers disappear
     // when their NIP-40 expiration passes without any new event arriving.
     return combineLatest([
       results$,
       runMarkers$,
+      jobs$,
       timer(0, EXPIRY_RECHECK_INTERVAL_MS),
     ]).pipe(
-      map(([resultEvents, runEvents]) =>
+      map(([resultEvents, runEvents, jobEvents]) =>
         castAndGroupCIEvents(
           resultEvents as NostrEvent[],
           runEvents as NostrEvent[],
+          jobEvents as NostrEvent[],
           castStore,
         ),
       ),
@@ -204,7 +222,7 @@ export function useCIForCommits(
     ).pipe(catchError(() => EMPTY));
   }, [idsKey, relayKey]);
 
-  // Read both kinds back from the store by #c.
+  // Read all CI kinds back from the store by #c.
   const runs = use$(() => {
     if (commitIds.length === 0) return undefined;
     const castStore = store as unknown as CastRefEventStore;
@@ -215,16 +233,21 @@ export function useCIForCommits(
     const runMarkers$ = store.timeline([
       { kinds: [CI_RUN_KIND], "#c": commitIds } as Filter,
     ]);
+    const jobs$ = store.timeline([
+      { kinds: [CI_JOB_RESULT_KIND], "#c": commitIds } as Filter,
+    ]);
 
     return combineLatest([
       results$,
       runMarkers$,
+      jobs$,
       timer(0, EXPIRY_RECHECK_INTERVAL_MS),
     ]).pipe(
-      map(([resultEvents, runEvents]) =>
+      map(([resultEvents, runEvents, jobEvents]) =>
         castAndGroupCIEvents(
           resultEvents as NostrEvent[],
           runEvents as NostrEvent[],
+          jobEvents as NostrEvent[],
           castStore,
         ),
       ),
@@ -293,12 +316,12 @@ export function useRepoCI(
     use$(() => relayGroupUrls$(repoRelayGroup), [repoRelayGroup]) ?? [];
   const relayKey = relays.join(",");
 
-  // Layer 1: fetch results + running markers repo-wide by #a.
+  // Layer 1: fetch CI activity repo-wide by #a.
   use$(() => {
     if (!repoCoords || repoCoords.length === 0 || relays.length === 0)
       return undefined;
     return resilientSubscription(pool, relays, [
-      { kinds: [CI_RUN_KIND, CI_RESULT_KIND], "#a": repoCoords } as Filter,
+      { kinds: [...CI_EVENT_KINDS], "#a": repoCoords } as Filter,
     ]).pipe(
       onlyEvents(),
       mapEventsToStore(store),
@@ -306,7 +329,7 @@ export function useRepoCI(
     );
   }, [coordsKey, relayKey, store]);
 
-  // Layer 2: read both kinds back from the store and group.
+  // Layer 2: read all CI kinds back from the store and group.
   return use$(() => {
     if (!repoCoords || repoCoords.length === 0) return undefined;
     const castStore = store as unknown as CastRefEventStore;
@@ -317,16 +340,21 @@ export function useRepoCI(
     const runMarkers$ = store.timeline([
       { kinds: [CI_RUN_KIND], "#a": repoCoords } as Filter,
     ]);
+    const jobs$ = store.timeline([
+      { kinds: [CI_JOB_RESULT_KIND], "#a": repoCoords } as Filter,
+    ]);
 
     return combineLatest([
       results$,
       runMarkers$,
+      jobs$,
       timer(0, EXPIRY_RECHECK_INTERVAL_MS),
     ]).pipe(
-      map(([resultEvents, runEvents]) =>
+      map(([resultEvents, runEvents, jobEvents]) =>
         castAndGroupCIEvents(
           resultEvents as NostrEvent[],
           runEvents as NostrEvent[],
+          jobEvents as NostrEvent[],
           castStore,
         ),
       ),
@@ -362,7 +390,7 @@ export function useRepoHasCI(
       return undefined;
     return resilientRequest(pool, relays, [
       {
-        kinds: [CI_RUN_KIND, CI_RESULT_KIND],
+        kinds: [...CI_EVENT_KINDS],
         "#a": repoCoords,
         limit: 1,
       } as Filter,
@@ -376,9 +404,7 @@ export function useRepoHasCI(
   const hasCI = use$(() => {
     if (!repoCoords || repoCoords.length === 0) return undefined;
     return store
-      .timeline([
-        { kinds: [CI_RUN_KIND, CI_RESULT_KIND], "#a": repoCoords } as Filter,
-      ])
+      .timeline([{ kinds: [...CI_EVENT_KINDS], "#a": repoCoords } as Filter])
       .pipe(map((events) => events.length > 0));
   }, [coordsKey, store]);
 
