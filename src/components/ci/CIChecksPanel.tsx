@@ -10,9 +10,17 @@
  * on every row so users can judge results for themselves.
  */
 
-import { useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { formatDistanceToNow } from "date-fns";
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { AlertCircle, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Collapsible,
@@ -34,6 +42,23 @@ import type { PRCIChecks } from "@/hooks/useCI";
 interface CIChecksPanelProps {
   checks: PRCIChecks;
   className?: string;
+}
+
+const LOG_TAIL_PREFIX_RE = /^\[log-tail omitted=(\d+)\]\n/;
+const LOG_TOP_THRESHOLD_PX = 4;
+
+function parseLogTail(content: string): {
+  log: string;
+  omittedBytes: number | undefined;
+} {
+  const match = LOG_TAIL_PREFIX_RE.exec(content);
+  if (!match) return { log: content, omittedBytes: undefined };
+
+  const omittedBytes = Number.parseInt(match[1], 10);
+  return {
+    log: content.slice(match[0].length),
+    omittedBytes: Number.isFinite(omittedBytes) ? omittedBytes : undefined,
+  };
 }
 
 export function CIChecksPanel({ checks, className }: CIChecksPanelProps) {
@@ -229,16 +254,185 @@ function CIJobRow({ job }: { job: CIJobResult }) {
         )}
       </div>
       {hasLog && showLog && (
-        <pre
-          className={cn(
-            "max-h-64 overflow-auto whitespace-pre-wrap break-words",
-            "border-t border-border/60 bg-muted/50 p-3",
-            "font-mono text-[11px] leading-relaxed",
-          )}
-        >
-          {result.log}
-        </pre>
+        <CILogViewer log={result.log} logUrl={result.logUrl} />
       )}
+    </div>
+  );
+}
+
+function CILogViewer({
+  log,
+  logUrl,
+}: {
+  log: string;
+  logUrl: string | undefined;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const noticeRef = useRef<HTMLDivElement | null>(null);
+  const logContentRef = useRef<HTMLPreElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const didInitialPositionRef = useRef(false);
+  const restoreDistanceFromBottomRef = useRef<number | null>(null);
+
+  const parsed = useMemo(() => parseLogTail(log), [log]);
+  const [fullLog, setFullLog] = useState<string | undefined>(undefined);
+  const [isLoadingFullLog, setIsLoadingFullLog] = useState(false);
+  const [fullLogError, setFullLogError] = useState<string | undefined>(
+    undefined,
+  );
+
+  const visibleLog = fullLog ?? parsed.log;
+  const isTailOnly = parsed.omittedBytes !== undefined && fullLog === undefined;
+
+  useLayoutEffect(() => {
+    didInitialPositionRef.current = false;
+    restoreDistanceFromBottomRef.current = null;
+  }, [log, logUrl]);
+
+  useEffect(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    restoreDistanceFromBottomRef.current = null;
+    setFullLog(undefined);
+    setIsLoadingFullLog(false);
+    setFullLogError(undefined);
+
+    return () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
+  }, [log, logUrl]);
+
+  const loadFullLog = useCallback(async () => {
+    if (!isTailOnly || isLoadingFullLog || !logUrl) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setIsLoadingFullLog(true);
+    setFullLogError(undefined);
+
+    try {
+      const response = await fetch(logUrl, { signal: controller.signal });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const text = await response.text();
+      const node = containerRef.current;
+      const noticeHeight = noticeRef.current?.offsetHeight ?? 0;
+      const logHeight = logContentRef.current?.scrollHeight ?? 0;
+      restoreDistanceFromBottomRef.current = node
+        ? Math.max(
+            0,
+            logHeight -
+              Math.max(0, node.scrollTop - noticeHeight) -
+              node.clientHeight,
+          )
+        : null;
+      setFullLog(text);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const reason = error instanceof Error ? error.message : "Unknown error";
+      setFullLogError(
+        `Full log is no longer available. Showing the saved tail. (${reason})`,
+      );
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsLoadingFullLog(false);
+        abortRef.current = null;
+      }
+    }
+  }, [isLoadingFullLog, isTailOnly, logUrl]);
+
+  const handleScroll = useCallback(() => {
+    const node = containerRef.current;
+    if (!node || node.scrollTop > LOG_TOP_THRESHOLD_PX || fullLogError) return;
+    void loadFullLog();
+  }, [fullLogError, loadFullLog]);
+
+  useLayoutEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    if (!didInitialPositionRef.current) {
+      node.scrollTop = node.scrollHeight;
+      didInitialPositionRef.current = true;
+      return;
+    }
+
+    const distanceFromBottom = restoreDistanceFromBottomRef.current;
+    if (distanceFromBottom === null) return;
+
+    const logHeight = logContentRef.current?.scrollHeight ?? node.scrollHeight;
+    node.scrollTop = Math.max(
+      0,
+      logHeight - node.clientHeight - distanceFromBottom,
+    );
+    restoreDistanceFromBottomRef.current = null;
+  }, [visibleLog]);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node || node.scrollTop > LOG_TOP_THRESHOLD_PX || fullLogError) return;
+    void loadFullLog();
+  }, [fullLogError, loadFullLog]);
+
+  return (
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      className={cn(
+        "max-h-64 overflow-auto border-t border-border/60 bg-muted/50",
+        "font-mono text-[11px] leading-relaxed",
+      )}
+    >
+      {isTailOnly && (
+        <div
+          ref={noticeRef}
+          className="border-b border-border/60 bg-muted/95 px-3 py-2 font-sans text-xs text-muted-foreground"
+        >
+          {isLoadingFullLog ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading full log…
+            </span>
+          ) : fullLogError ? (
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="flex min-w-0 items-center gap-2 text-destructive">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>{fullLogError}</span>
+              </span>
+              {logUrl && (
+                <button
+                  type="button"
+                  onClick={() => void loadFullLog()}
+                  className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  Retry
+                </button>
+              )}
+            </span>
+          ) : logUrl ? (
+            <span>
+              Earlier log output omitted ({parsed.omittedBytes} bytes). Scroll
+              to the top to load the full log.
+            </span>
+          ) : (
+            <span className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              Earlier log output omitted ({parsed.omittedBytes} bytes), but no
+              full log link was included.
+            </span>
+          )}
+        </div>
+      )}
+      <pre
+        ref={logContentRef}
+        className="m-0 whitespace-pre-wrap break-words p-3"
+      >
+        {visibleLog}
+      </pre>
     </div>
   );
 }
