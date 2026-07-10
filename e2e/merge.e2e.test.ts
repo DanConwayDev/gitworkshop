@@ -36,6 +36,7 @@ import {
   GraspServer,
   RelayClient,
   TestSigner,
+  advanceBranch,
   seedRepo,
   seedTag,
   seedPatchPR,
@@ -382,6 +383,206 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       issuePool.dispose();
     }
   });
+
+  it("auto-resolves issues from authoritative git commits ahead of the signed state", async () => {
+    const issueRepo = await seedRepo(server, relay, maintainer, {
+      identifier: "merge-git-ahead-issue-auto-resolve-repo",
+      name: "Merge Git-Ahead Issue Auto-Resolve Repo",
+      files: { "README.md": "# git-ahead issue auto-resolve repo\n\nbase\n" },
+    });
+    const issuePool = new GitGraspPool({
+      cloneUrls: [issueRepo.cloneUrl],
+      corsProxyBase: null,
+    });
+
+    try {
+      const gitAheadIssue = await IssueFactory.create(
+        issueRepo.coordinate,
+        issueRepo.pubkey,
+        "Resolve from git-ahead commit",
+        "The signed state is behind the commit that references this issue.",
+      ).sign(contributor);
+      const patchIssue = await IssueFactory.create(
+        issueRepo.coordinate,
+        issueRepo.pubkey,
+        "Resolve from patch commit",
+        "The branch being merged should still be scanned.",
+      ).sign(contributor);
+      await relay.publish(gitAheadIssue);
+      await relay.publish(patchIssue);
+
+      const gitAheadRef = `#${gitAheadIssue.id.slice(0, 8)}`;
+      const advancedB = await advanceBranch(issueRepo, maintainer, {
+        pushTo: [server],
+        publishStateTo: [relay],
+        path: "B.md",
+        content: "B is on git but not yet in signed state\n",
+        message: `B on authoritative git\n\nFixes ${gitAheadRef}`,
+      });
+      const advancedC = await advanceBranch(advancedB.repo, maintainer, {
+        pushTo: [server],
+        publishStateTo: [relay],
+        path: "C.md",
+        content: "C is on git but not yet in signed state\n",
+        message: "C on authoritative git",
+      });
+      const advancedD = await advanceBranch(advancedC.repo, maintainer, {
+        pushTo: [server],
+        publishStateTo: [relay],
+        path: "D.md",
+        content: "D is the authoritative git head\n",
+        message: "D on authoritative git",
+      });
+      const gitAheadRepo: SeededRepo = {
+        ...advancedD.repo,
+      };
+
+      const patchIssueRef = `#${patchIssue.id.slice(0, 8)}`;
+      const seeded = await seedPatchPR(gitAheadRepo, relay, contributor, {
+        path: "PATCH-FIX.md",
+        content: "# Patch fix\n\nmerged through the web flow\n",
+        subject: "Add patch fix note",
+        body: `Fixes ${patchIssueRef}`,
+      });
+
+      const store = new EventStore();
+      const patchCast = new Patch(seeded.patch, store);
+      const buildOutcome = await buildPatchChainObjects(
+        [patchCast],
+        issuePool,
+        new AbortController().signal,
+        [issueRepo.cloneUrl],
+      );
+      if ("reason" in buildOutcome) {
+        throw new Error(
+          `buildPatchChainObjects failed: ${buildOutcome.reason}`,
+        );
+      }
+
+      const staleState = buildStateWithRefs(maintainer, {
+        identifier: issueRepo.identifier,
+        refs: [
+          {
+            name: `refs/heads/${issueRepo.branch}`,
+            commitHash: issueRepo.headCommit,
+          },
+        ],
+        headBranch: issueRepo.branch,
+      });
+
+      const transports = makePoolTransports(
+        issuePool,
+        [relay],
+        [issueRepo.cloneUrl],
+        staleState,
+      );
+      const result = await performMerge({
+        signer: maintainer,
+        signerPubkey: maintainer.pubkey,
+        chainObjects: buildOutcome.objects,
+        finalTreeHash: buildOutcome.finalTreeHash,
+        tipCommitHash: buildOutcome.tipCommitHash,
+        dTag: issueRepo.identifier,
+        defaultBranchName: issueRepo.branch,
+        defaultBranchHead: gitAheadRepo.headCommit,
+        currentStateEvent: staleState,
+        repoCoords: [issueRepo.coordinate],
+        rootEventId: seeded.patch.id,
+        rootAuthorPubkey: contributor.pubkey,
+        subject: patchCast.subject,
+        prNevent: buildPRNevent(seeded.patch.id, contributor.pubkey, [
+          server.relayUrl,
+        ]),
+        committer: {
+          name: "maintainer",
+          email: `${maintainer.npub}@nostr`,
+          timestamp: advancedD.repo.headCommitTimestamp + 180,
+          timezone: "+0000",
+        },
+        patchEventIds: [{ id: seeded.patch.id, pubkey: contributor.pubkey }],
+        issueScanObjects: [
+          ...advancedB.objects,
+          ...advancedC.objects,
+          ...advancedD.objects,
+        ],
+        issueAutoResolve: {
+          issues: [
+            {
+              id: gitAheadIssue.id,
+              pubkey: gitAheadIssue.pubkey,
+              status: "open",
+            },
+            { id: patchIssue.id, pubkey: patchIssue.pubkey, status: "open" },
+          ],
+          maintainers: [maintainer.pubkey],
+        },
+        ...transports.transports,
+      });
+
+      expect(transports.getPushSummary()?.successCount).toBe(1);
+      const refs = await getReceivePackRefs(issueRepo.cloneUrl);
+      expect(refs.refs[`refs/heads/${issueRepo.branch}`]).toBe(
+        result.mergeCommit.hash,
+      );
+
+      expect(result.issueStatuses).toHaveLength(2);
+      const gitAheadStatus = result.issueStatuses.find((status) =>
+        status.tags.some(
+          ([name, value, , marker]) =>
+            name === "e" && value === gitAheadIssue.id && marker === "root",
+        ),
+      );
+      const patchStatus = result.issueStatuses.find((status) =>
+        status.tags.some(
+          ([name, value, , marker]) =>
+            name === "e" && value === patchIssue.id && marker === "root",
+        ),
+      );
+
+      expect(gitAheadStatus).toBeDefined();
+      expect(gitAheadStatus?.kind).toBe(STATUS_RESOLVED);
+      expect(gitAheadStatus?.pubkey).toBe(maintainer.pubkey);
+      expect(gitAheadStatus?.tags).toContainEqual(["a", issueRepo.coordinate]);
+      expect(gitAheadStatus?.tags).toContainEqual(["r", advancedB.commit]);
+      expect(gitAheadStatus?.tags).toContainEqual([
+        "r",
+        result.mergeCommit.hash,
+      ]);
+      expect(gitAheadStatus?.content).toBe(
+        `Fixes ${gitAheadRef}\n\n` +
+          `resolved by commit ${advancedB.commit}, when merged in commit ${result.mergeCommit.hash}`,
+      );
+
+      expect(patchStatus).toBeDefined();
+      expect(patchStatus?.tags).toContainEqual(["r", seeded.commit]);
+      expect(patchStatus?.tags).toContainEqual(["r", result.mergeCommit.hash]);
+      expect(patchStatus?.content).toBe(
+        `Fixes ${patchIssueRef}\n\n` +
+          `resolved by commit ${seeded.commit}, when merged in commit ${result.mergeCommit.hash}`,
+      );
+
+      const relayStatuses = await relay.query([
+        {
+          kinds: [STATUS_RESOLVED],
+          "#e": [gitAheadIssue.id, patchIssue.id],
+        },
+      ]);
+      expect(relayStatuses.map((event) => event.id)).toEqual(
+        expect.arrayContaining(
+          result.issueStatuses.map((issueStatus) => issueStatus.id),
+        ),
+      );
+      expect(transports.events.map((event) => event.id)).toEqual(
+        expect.arrayContaining([
+          result.state.id,
+          result.status.id,
+          ...result.issueStatuses.map((issueStatus) => issueStatus.id),
+        ]),
+      );
+    } finally {
+      issuePool.dispose();
+    }
+  }, 90_000);
 
   it("merges a patch when an in-sync repo has an annotated tag plus another branch", async () => {
     const taggedRepo = await seedRepo(server, relay, maintainer, {

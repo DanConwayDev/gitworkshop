@@ -19,6 +19,7 @@ import {
 } from "./harness";
 import { Patch } from "@/casts/Patch";
 import { PR } from "@/casts/PR";
+import { IssueFactory } from "@/factories/IssueFactory";
 import {
   buildPRNevent,
   GitGraspPool,
@@ -390,6 +391,160 @@ describeIfGrasp("e2e — lagging Grasp mirror merge fan-out", () => {
       result.mergeCommit.hash,
     );
     expect(refsA.refs[`refs/heads/${prSeed.branch}`]).toBe(prSeed.commit);
+  }, 90_000);
+
+  it("does not auto-resolve issues from old state-covered commits sent only to catch up a lagging mirror", async () => {
+    fixture = await createFixture();
+    const seededRepo = await seedMultiServerRepo(
+      [fixture.serverA, fixture.serverB],
+      [fixture.relayA, fixture.relayB],
+      fixture.maintainer,
+      {
+        identifier: "catch-up-scan-boundary",
+        pushInitialTo: [fixture.serverA],
+      },
+    );
+
+    const oldIssue = await IssueFactory.create(
+      seededRepo.coordinate,
+      seededRepo.pubkey,
+      "Old catch-up issue",
+      "A previously signed commit mentioned this issue.",
+    ).sign(fixture.contributor);
+    await fixture.relayA.publish(oldIssue);
+
+    const oldIssueRef = `#${oldIssue.id.slice(0, 8)}`;
+    const advancedB = await advanceBranch(seededRepo, fixture.maintainer, {
+      pushTo: [fixture.serverA],
+      publishStateTo: [fixture.relayA],
+      path: "B.md",
+      content: "B exists in signed state before the merge\n",
+      message: `B already signed\n\nFixes ${oldIssueRef}`,
+    });
+    const advancedC = await advanceBranch(
+      { ...advancedB.repo, servers: seededRepo.servers },
+      fixture.maintainer,
+      {
+        pushTo: [fixture.serverA],
+        publishStateTo: [fixture.relayA],
+        path: "C.md",
+        content: "C exists in signed state before the merge\n",
+        message: "C already signed",
+      },
+    );
+    const advancedD = await advanceBranch(
+      { ...advancedC.repo, servers: seededRepo.servers },
+      fixture.maintainer,
+      {
+        pushTo: [fixture.serverA],
+        publishStateTo: [fixture.relayA],
+        path: "D.md",
+        content: "D exists in signed state before the merge\n",
+        message: "D already signed",
+      },
+    );
+    const repo = { ...advancedD.repo, servers: seededRepo.servers };
+    pool = new GitGraspPool({ cloneUrls: repo.cloneUrls, corsProxyBase: null });
+
+    const refsBBefore = await getReceivePackRefs(repo.servers[1].cloneUrl);
+    expect(refsBBefore.refs[`refs/heads/${repo.branch}`]).toBeDefined();
+    expect(refsBBefore.refs[`refs/heads/${repo.branch}`]).not.toBe(
+      repo.headCommit,
+    );
+
+    const seeded = await seedPatchPR(
+      repo,
+      fixture.relayA,
+      fixture.contributor,
+      {
+        path: "NEW-MERGE.md",
+        content: "# Merge\n\nThis is the only new branch content.\n",
+        subject: "Add new merge content",
+      },
+    );
+    const store = new EventStore();
+    const patchCast = new Patch(seeded.patch, store);
+    const buildOutcome = await buildPatchChainObjects(
+      [patchCast],
+      pool,
+      new AbortController().signal,
+      repo.cloneUrls,
+    );
+    if ("reason" in buildOutcome) {
+      throw new Error(`buildPatchChainObjects failed: ${buildOutcome.reason}`);
+    }
+
+    const transports = makePoolTransports(
+      pool,
+      [fixture.relayA, fixture.relayB],
+      repo.cloneUrls,
+      repo.state,
+    );
+    const result = await performMerge({
+      signer: fixture.maintainer,
+      signerPubkey: fixture.maintainer.pubkey,
+      chainObjects: buildOutcome.objects,
+      finalTreeHash: buildOutcome.finalTreeHash,
+      tipCommitHash: buildOutcome.tipCommitHash,
+      dTag: repo.identifier,
+      defaultBranchName: repo.branch,
+      defaultBranchHead: repo.headCommit,
+      currentStateEvent: repo.state,
+      repoCoords: [repo.coordinate],
+      rootEventId: seeded.patch.id,
+      rootAuthorPubkey: fixture.contributor.pubkey,
+      subject: patchCast.subject,
+      prNevent: buildPRNevent(
+        seeded.patch.id,
+        fixture.contributor.pubkey,
+        repo.relayUrls,
+      ),
+      committer: makeCommitter(repo, fixture.maintainer),
+      patchEventIds: [
+        { id: seeded.patch.id, pubkey: fixture.contributor.pubkey },
+      ],
+      issueAutoResolve: {
+        issues: [{ id: oldIssue.id, pubkey: oldIssue.pubkey, status: "open" }],
+        maintainers: [fixture.maintainer.pubkey],
+      },
+      ...transports.transports,
+    });
+
+    expect(transports.getPushSummary()?.successCount).toBe(2);
+    await expectBranch(
+      repo.servers[0].cloneUrl,
+      repo.branch,
+      result.mergeCommit.hash,
+    );
+    await expectBranch(
+      repo.servers[1].cloneUrl,
+      repo.branch,
+      result.mergeCommit.hash,
+    );
+
+    const bOnlyPool = new GitGraspPool({
+      cloneUrls: [repo.servers[1].cloneUrl],
+      corsProxyBase: null,
+    });
+    try {
+      const caughtUpCommit = await bOnlyPool.getSingleCommit(
+        advancedB.commit,
+        new AbortController().signal,
+      );
+      expect(caughtUpCommit?.hash).toBe(advancedB.commit);
+    } finally {
+      bOnlyPool.dispose();
+    }
+
+    expect(result.issueStatuses).toHaveLength(0);
+    const issueStatusesA = await fixture.relayA.query([
+      { kinds: [STATUS_RESOLVED], "#e": [oldIssue.id] },
+    ]);
+    const issueStatusesB = await fixture.relayB.query([
+      { kinds: [STATUS_RESOLVED], "#e": [oldIssue.id] },
+    ]);
+    expect(issueStatusesA).toHaveLength(0);
+    expect(issueStatusesB).toHaveLength(0);
   }, 90_000);
 
   it("preserves an annotated tag that only A knew about and pushes it to B with the merge", async () => {
