@@ -524,13 +524,12 @@ export default function PRPage() {
   }, [hasRevisions, originalPRTipCommitId, prCommitHistory.commits]);
 
   // Mergeability evaluation and merge pushes must target the authoritative
-  // default-branch tip. That is usually the signed Nostr state head (never
-  // `gitPoolState.latestCommit`, which can point at whichever server won the
-  // git-info race while mirrors converge after a push) — but when a git server
-  // is verifiably ahead of the signed state, the git head is authoritative.
-  // See useAuthoritativeDefaultBranch for the full reasoning.
+  // default-branch tip — resolved by the pool (`PoolState.authoritativeHead`):
+  // the signed Nostr state head, unless a git server is verifiably ahead of
+  // it. Never `gitPoolState.latestCommit`, which can point at whichever
+  // server won the git-info race while mirrors converge after a push.
   const { defaultBranchName, defaultBranchHead } =
-    useAuthoritativeDefaultBranch(gitPool, gitPoolState, repoState);
+    useAuthoritativeDefaultBranch(gitPoolState, repoState);
 
   const [behindCount, setBehindCount] = useState<number | undefined>(undefined);
   // false = merge base is not on the default branch (no shared ancestor)

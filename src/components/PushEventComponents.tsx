@@ -133,6 +133,7 @@ const EMPTY_POOL_STATE: PoolState = {
   readmeFilename: null,
   defaultBranch: null,
   warning: null,
+  authoritativeHead: null,
   error: null,
   lastCheckedAt: null,
   crossRefDiscrepancies: [],

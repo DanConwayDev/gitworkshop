@@ -24,6 +24,7 @@ import type {
   PoolOptions,
   PoolSubscriber,
   PoolWarning,
+  AuthoritativeHead,
   RefDiscrepancy,
   UrlRefStatus,
   StateEventInput,
@@ -56,6 +57,12 @@ import { ZERO_HASH, type RefUpdate } from "@/lib/git-push";
 
 const DEFAULT_EVICTION_GRACE_MS = 60_000;
 
+/**
+ * How many commits to walk when verifying that the state head is an ancestor
+ * of a git server head that claims to be ahead of the signed state.
+ */
+const ANCESTRY_VERIFICATION_MAX_DEPTH = 500;
+
 // ---------------------------------------------------------------------------
 // Initial state
 // ---------------------------------------------------------------------------
@@ -72,6 +79,7 @@ function makeInitialState(): PoolState {
     readmeFilename: null,
     defaultBranch: null,
     warning: null,
+    authoritativeHead: null,
     error: null,
     lastCheckedAt: null,
     crossRefDiscrepancies: [],
@@ -335,6 +343,18 @@ export class GitGraspPool {
   // --- Winner tracking ---
   private winnerUrl: string | null = null;
 
+  // --- Authoritative head ancestry verification ---
+  /**
+   * Cached result of the "is the git-ahead head a descendant of the state
+   * head?" check, keyed by the exact (stateHead, gitHead) pair. `undefined`
+   * result = check in flight. Cleared implicitly when either head changes.
+   */
+  private ancestryVerification: {
+    stateHead: string;
+    gitHead: string;
+    descendsFromState: boolean | undefined;
+  } | null = null;
+
   constructor(options: PoolOptions) {
     this.evictionGraceMs =
       options.evictionGracePeriodMs ?? DEFAULT_EVICTION_GRACE_MS;
@@ -426,8 +446,110 @@ export class GitGraspPool {
 
   private setState(updater: (prev: PoolState) => PoolState): void {
     const next = updater(this.state$.getValue());
+    // Every emission carries a consistent authoritative head, whatever code
+    // path produced it — and any unverified git-ahead claim kicks off the
+    // (idempotent, cache-first) ancestry check that may upgrade it later.
+    next.authoritativeHead = this.deriveAuthoritativeHead(next);
+    this.ensureAncestryVerification(next.warning);
     this.state$.next(next);
     this.notify();
+  }
+
+  // -----------------------------------------------------------------------
+  // Authoritative head resolution
+  // -----------------------------------------------------------------------
+
+  /**
+   * Resolve the authoritative default-branch tip for this emission — see
+   * {@link AuthoritativeHead} for the semantics.
+   *
+   * The signed state head wins whenever a state event exists. A git server
+   * head reported ahead of it (the `state-behind-git` warning) only takes
+   * over once the ancestry check has confirmed the state head is reachable
+   * from it: the warning is committer-date based, so without the check a
+   * rewritten/divergent server head — or a stale cached warning emitted by
+   * the fast-path right after a merge push — could hijack the merge target.
+   */
+  private deriveAuthoritativeHead(next: PoolState): AuthoritativeHead | null {
+    const stateEvent = this.stateManager.currentState;
+    const stateHead = stateEvent ? stateEvent.headCommitId : undefined;
+
+    if (stateHead) {
+      const verification = this.ancestryVerification;
+      if (
+        next.warning?.kind === "state-behind-git" &&
+        next.warning.stateCommitId === stateHead &&
+        verification &&
+        verification.stateHead === stateHead &&
+        verification.gitHead === next.warning.gitCommitId &&
+        verification.descendsFromState === true
+      ) {
+        return { commitId: next.warning.gitCommitId, source: "git" };
+      }
+      return { commitId: stateHead, source: "state" };
+    }
+
+    // No state event (still loading or confirmed absent) — the git servers
+    // are all we have.
+    return next.latestCommit
+      ? { commitId: next.latestCommit.hash, source: "git" }
+      : null;
+  }
+
+  /**
+   * Start (once per (stateHead, gitHead) pair) the ancestry walk that decides
+   * whether a `state-behind-git` git head really extends the signed state.
+   * Cache-first and fire-and-forget; on a positive result the state is
+   * re-emitted so `authoritativeHead` upgrades to the git head.
+   */
+  private ensureAncestryVerification(warning: PoolWarning | null): void {
+    if (warning?.kind !== "state-behind-git") return;
+    const stateEvent = this.stateManager.currentState;
+    const stateHead = stateEvent ? stateEvent.headCommitId : undefined;
+    if (!stateHead || warning.stateCommitId !== stateHead) return;
+
+    const gitHead = warning.gitCommitId;
+    const existing = this.ancestryVerification;
+    if (
+      existing &&
+      existing.stateHead === stateHead &&
+      existing.gitHead === gitHead
+    ) {
+      return; // already checked or in flight
+    }
+
+    const verification = {
+      stateHead,
+      gitHead,
+      descendsFromState: undefined as boolean | undefined,
+    };
+    this.ancestryVerification = verification;
+
+    const abort = new AbortController();
+    this.getCommitHistory(
+      gitHead,
+      ANCESTRY_VERIFICATION_MAX_DEPTH,
+      abort.signal,
+      undefined,
+      stateHead,
+    )
+      .then((history) => {
+        if (this.isDisposed || this.ancestryVerification !== verification) {
+          return;
+        }
+        verification.descendsFromState = !!history?.some(
+          (commit) => commit.hash === stateHead,
+        );
+        if (verification.descendsFromState) {
+          // Re-emit so deriveAuthoritativeHead picks up the verified head.
+          this.setState((prev) => ({ ...prev }));
+        }
+      })
+      .catch(() => {
+        // Walk failed — leave descendsFromState undefined so the signed
+        // state head stays authoritative; a later warning re-triggers the
+        // check only if the head pair changes.
+      });
   }
 
   // -----------------------------------------------------------------------
@@ -550,6 +672,11 @@ export class GitGraspPool {
       }));
       return;
     }
+
+    // Re-emit so authoritativeHead reflects the new state head immediately
+    // (the fetch paths below may not produce another emission, e.g. when the
+    // refs already match what the servers reported).
+    this.setState((prev) => ({ ...prev }));
 
     // If the state event changed and we've already fetched, check if we
     // need to re-fetch

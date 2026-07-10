@@ -220,6 +220,40 @@ export type PoolWarning =
     };
 
 // ---------------------------------------------------------------------------
+// Authoritative head
+// ---------------------------------------------------------------------------
+
+/**
+ * The pool's resolved authoritative default-branch tip.
+ *
+ * This is the single commit that mergeability evaluation, merge pushes,
+ * apply-to-tip and any other *acting* consumer must target. It is NOT always
+ * the signed state head, and it is NOT `latestCommit` (which is a display
+ * value picked by committer-date race and can briefly point at a lagging
+ * server head while mirrors converge after a push):
+ *
+ * - `source: "state"` — the signed kind:30618 state head. Used whenever a
+ *   state event exists, including while mirrors are still converging towards
+ *   it and when a differing git head has NOT been verified as a descendant
+ *   (a rewritten/divergent server must not become the merge target — the
+ *   signed state stays the trust anchor).
+ * - `source: "git"`  — a git server head verified to be strictly ahead of
+ *   the state head (the state head is reachable from it). This happens when
+ *   a maintainer pushes without updating the state event; merging against
+ *   the stale state head would fail the push's compare-and-swap and sign a
+ *   state update that orphans the newer commits. Also used when no state
+ *   event exists at all.
+ *
+ * `null` while nothing is known yet (no state event and no git result).
+ */
+export interface AuthoritativeHead {
+  /** The authoritative tip commit of the default branch. */
+  commitId: string;
+  /** Where the commit came from (see above). */
+  source: "state" | "git";
+}
+
+// ---------------------------------------------------------------------------
 // Cross-ref discrepancy
 // ---------------------------------------------------------------------------
 
@@ -289,6 +323,13 @@ export interface PoolState {
   defaultBranch: string | null;
   /** Warning from state event vs git server comparison */
   warning: PoolWarning | null;
+  /**
+   * The resolved authoritative default-branch tip — see {@link AuthoritativeHead}.
+   * Recomputed on every state emission; anything that acts on the default
+   * branch (mergeability, merge pushes, apply-to-tip) must use this rather
+   * than `latestCommit` or the raw state head.
+   */
+  authoritativeHead: AuthoritativeHead | null;
   /** Error message when all URLs have failed */
   error: string | null;
   /**

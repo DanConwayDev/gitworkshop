@@ -59,6 +59,7 @@ function makeInitialState(hasUrls: boolean): PoolState {
     readmeFilename: null,
     defaultBranch: null,
     warning: null,
+    authoritativeHead: null,
     error: null,
     lastCheckedAt: null,
     crossRefDiscrepancies: [],
