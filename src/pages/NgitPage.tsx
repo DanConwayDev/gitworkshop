@@ -483,7 +483,10 @@ export default function NgitPage() {
                       <CodeBlock>git push -u</CodeBlock>
                     </div>
                     <p className="text-muted-foreground mt-2">
-                      Or use ngit for more options (cover letter, etc.):
+                      Push more commits to the same pr/ branch to update the PR.
+                    </p>
+                    <p className="text-muted-foreground mt-2">
+                      Or use ngit send:
                     </p>
                     <CodeBlock>ngit send</CodeBlock>
                   </div>
