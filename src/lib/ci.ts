@@ -121,6 +121,8 @@ export interface CIWorkflowRun {
   prRootId: string | undefined;
   /** Latest completed result per job id, sorted by job id. */
   jobs: CIJobResult[];
+  /** Latest combined workflow result, when the coordinator published one. */
+  workflowResult: CIResult | undefined;
   /** Jobs currently executing according to the latest progress marker. */
   inProgressJobs: string[];
   /** An unexpired queued/in-progress kind:39842 marker newer than the result. */
@@ -326,6 +328,7 @@ export function groupCIWorkflowRuns(
       branchRef: group.branchRef,
       prRootId: group.prRootId,
       jobs,
+      workflowResult: group.latestWorkflowResult,
       inProgressJobs: [...group.inProgressJobs].sort(),
       pendingRun,
       status,

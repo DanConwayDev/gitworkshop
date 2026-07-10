@@ -28,6 +28,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { UserLink } from "@/components/UserAvatar";
+import { EventCardActions } from "@/components/EventCardActions";
 import { CIStatusIcon } from "./CIStatusIcon";
 import { cn } from "@/lib/utils";
 import {
@@ -141,6 +142,7 @@ export function CIRunRow({
   const relativeTime = formatDistanceToNow(new Date(run.createdAt * 1000), {
     addSuffix: true,
   });
+  const primaryEvent = run.workflowResult?.event ?? run.pendingRun?.event;
 
   return (
     <li>
@@ -172,6 +174,7 @@ export function CIRunRow({
               avatarSize="xs"
               nameClassName="text-xs font-normal text-muted-foreground max-w-24 truncate"
             />
+            {primaryEvent && <EventCardActions event={primaryEvent} />}
           </div>
         </div>
 
@@ -192,6 +195,7 @@ export function CIRunRow({
                   new Date(run.pendingRun.event.created_at * 1000),
                   { addSuffix: true },
                 )}
+                <EventCardActions event={run.pendingRun.event} />
               </div>
             )}
             {run.jobs.map((job) => (
@@ -251,6 +255,7 @@ function CIJobRow({ job }: { job: CIJobResult }) {
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
         )}
+        <EventCardActions event={result.event} />
       </div>
       {hasLog && showLog && (
         <CILogViewer log={result.log} logUrl={result.logUrl} />
