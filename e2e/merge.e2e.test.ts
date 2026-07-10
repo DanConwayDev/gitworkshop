@@ -49,6 +49,7 @@ import {
 } from "./harness";
 import { Patch } from "@/casts/Patch";
 import { PR } from "@/casts/PR";
+import { IssueFactory } from "@/factories/IssueFactory";
 import {
   createMergeCommitObject,
   buildPatchChainObjects,
@@ -63,7 +64,7 @@ import { GitGraspPool } from "@/lib/git-grasp-pool";
 import { getReceivePackRefs, ZERO_HASH } from "@/lib/git-push";
 import { gitObjectBytes, sha1hex, type CommitPerson } from "@/lib/git-objects";
 import type { PackableObject } from "@/lib/git-packfile";
-import { PR_KIND, STATUS_RESOLVED } from "@/lib/nip34";
+import { ISSUE_KIND, PR_KIND, STATUS_RESOLVED } from "@/lib/nip34";
 
 const describeIfGrasp = graspBinaryAvailable() ? describe : describe.skip;
 
@@ -257,6 +258,129 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
 
     // sanity: ZERO_HASH constant is the all-zero ref (documents the push contract)
     expect(ZERO_HASH).toMatch(/^0{40}$/);
+  });
+
+  it("auto-resolves an open issue referenced by a commit being merged", async () => {
+    const issueRepo = await seedRepo(server, relay, maintainer, {
+      identifier: "merge-issue-auto-resolve-repo",
+      name: "Merge Issue Auto-Resolve Repo",
+      files: { "README.md": "# issue auto-resolve repo\n\nbase line\n" },
+    });
+    const issuePool = new GitGraspPool({
+      cloneUrls: [issueRepo.cloneUrl],
+      corsProxyBase: null,
+    });
+
+    try {
+      const issue = await IssueFactory.create(
+        issueRepo.coordinate,
+        issueRepo.pubkey,
+        "Document the merge path",
+        "The merge should publish an issue-resolution status.",
+      ).sign(contributor);
+      await relay.publish(issue);
+
+      const issues = await relay.query([
+        { kinds: [ISSUE_KIND], authors: [contributor.pubkey] },
+      ]);
+      expect(issues.map((event) => event.id)).toContain(issue.id);
+
+      const issueRef = `#${issue.id.slice(0, 8)}`;
+      const seeded = await seedPatchPR(issueRepo, relay, contributor, {
+        path: "ISSUE-FIX.md",
+        content: "# Issue fix\n\nmerged through the web flow\n",
+        subject: "Add issue fix note",
+        body: `Fixes ${issueRef}`,
+      });
+
+      const store = new EventStore();
+      const patchCast = new Patch(seeded.patch, store);
+      const buildOutcome = await buildPatchChainObjects(
+        [patchCast],
+        issuePool,
+        new AbortController().signal,
+        [issueRepo.cloneUrl],
+      );
+      if ("reason" in buildOutcome) {
+        throw new Error(
+          `buildPatchChainObjects failed: ${buildOutcome.reason}`,
+        );
+      }
+
+      const transports = makePoolTransports(
+        issuePool,
+        [relay],
+        [issueRepo.cloneUrl],
+        issueRepo.state,
+      );
+      const result = await performMerge({
+        signer: maintainer,
+        signerPubkey: maintainer.pubkey,
+        chainObjects: buildOutcome.objects,
+        finalTreeHash: buildOutcome.finalTreeHash,
+        tipCommitHash: buildOutcome.tipCommitHash,
+        dTag: issueRepo.identifier,
+        defaultBranchName: issueRepo.branch,
+        defaultBranchHead: issueRepo.headCommit,
+        currentStateEvent: issueRepo.state,
+        repoCoords: [issueRepo.coordinate],
+        rootEventId: seeded.patch.id,
+        rootAuthorPubkey: contributor.pubkey,
+        subject: patchCast.subject,
+        prNevent: buildPRNevent(seeded.patch.id, contributor.pubkey, [
+          server.relayUrl,
+        ]),
+        committer: {
+          name: "maintainer",
+          email: `${maintainer.npub}@nostr`,
+          timestamp: issueRepo.headCommitTimestamp + 180,
+          timezone: "+0000",
+        },
+        patchEventIds: [{ id: seeded.patch.id, pubkey: contributor.pubkey }],
+        issueAutoResolve: {
+          issues: [{ id: issue.id, pubkey: issue.pubkey, status: "open" }],
+          maintainers: [maintainer.pubkey],
+        },
+        ...transports.transports,
+      });
+
+      expect(transports.getPushSummary()?.successCount).toBe(1);
+      const refs = await getReceivePackRefs(issueRepo.cloneUrl);
+      expect(refs.refs[`refs/heads/${issueRepo.branch}`]).toBe(
+        result.mergeCommit.hash,
+      );
+
+      expect(result.issueStatuses).toHaveLength(1);
+      const [issueStatus] = result.issueStatuses;
+      expect(issueStatus.kind).toBe(STATUS_RESOLVED);
+      expect(issueStatus.pubkey).toBe(maintainer.pubkey);
+      expect(issueStatus.tags).toContainEqual(["e", issue.id, "", "root"]);
+      expect(issueStatus.tags).toContainEqual(["a", issueRepo.coordinate]);
+      expect(issueStatus.tags).toContainEqual(["r", seeded.commit]);
+      expect(issueStatus.tags).toContainEqual(["r", result.mergeCommit.hash]);
+      expect(issueStatus.tags).toContainEqual([
+        "alt",
+        "issue resolved from commit message",
+      ]);
+      expect(issueStatus.content).toBe(
+        `Fixes ${issueRef}\n\n` +
+          `resolved by commit ${seeded.commit}, when merged in commit ${result.mergeCommit.hash}`,
+      );
+
+      const statuses = await relay.query([
+        { kinds: [STATUS_RESOLVED], "#e": [issue.id] },
+      ]);
+      expect(statuses.map((event) => event.id)).toContain(issueStatus.id);
+      expect(transports.events.map((event) => event.id)).toEqual(
+        expect.arrayContaining([
+          result.state.id,
+          result.status.id,
+          issueStatus.id,
+        ]),
+      );
+    } finally {
+      issuePool.dispose();
+    }
   });
 
   it("merges a patch when an in-sync repo has an annotated tag plus another branch", async () => {
