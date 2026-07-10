@@ -39,6 +39,7 @@ export type PRMergeabilityStatus =
   | "idle"
   | "loading"
   | "ready"
+  | "already-merged"
   | "conflicts"
   | "error";
 
@@ -73,12 +74,10 @@ export interface PRMergeability {
   /** Human-readable error when status === "error" */
   errorMessage: string | null;
   /**
-   * Set when the PR event's claimed `merge-base` tag disagrees with the merge
-   * base computed from git history. A mismatch means the PR author's tooling
-   * (e.g. ngit) recorded a stale/incorrect merge base — the exact condition
-   * that can drag unrelated commits into the PR or produce a history-losing
-   * merge. The merge itself always uses the computed base (so it stays safe),
-   * but the maintainer should be warned that the PR metadata is untrustworthy.
+   * Set when the PR event's claimed `merge-base` tag disagrees with the common
+   * ancestor computed from git history before the PR has landed. Once the PR
+   * tip is reachable from the default branch, that is treated as
+   * `already-merged`, not as a bad merge-base tag.
    */
   mergeBaseMismatch: MergeBaseMismatch | null;
   /** Re-run the check */
@@ -212,13 +211,16 @@ export function usePRMergeability(
         return;
       }
 
-      // Detect a stale/incorrect claimed merge base. The PR event's
-      // `merge-base` tag should equal the common ancestor of the default
-      // branch and the PR tip — advancing the default branch forward does NOT
-      // change that ancestor. So when the claimed tag disagrees with the
-      // computed base, the PR author's tooling miscalculated (or the branch was
-      // rewritten): a red flag worth surfacing even though the merge below
-      // uses the computed base and stays safe.
+      // If the nearest common ancestor is the PR tip, the default branch
+      // already contains this PR tip. That is not the PR's original merge base;
+      // it is an already-merged/reachable condition, so do not build another
+      // merge commit or compare it to the claimed merge-base tag.
+      if (mergeBase === tipCommitId) {
+        setStatus("already-merged");
+        return;
+      }
+
+      // Detect a stale/incorrect claimed merge base before the PR has landed.
       if (claimedMergeBase && claimedMergeBase !== mergeBase) {
         setMergeBaseMismatch({
           claimed: claimedMergeBase,

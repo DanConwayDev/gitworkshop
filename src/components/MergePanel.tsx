@@ -471,6 +471,7 @@ export function MergePanel({
     mergeStep === "idle" &&
     (pr.status === "open" || pr.status === "draft") &&
     (mergeability.status === "ready" ||
+      mergeability.status === "already-merged" ||
       mergeability.status === "ready-apply-only" ||
       mergeability.status === "conflicts" ||
       (!supportsBrowserMerge && mergeability.status !== "loading"));
@@ -1186,37 +1187,39 @@ export function MergePanel({
             </div>
 
             {/* Stale claimed merge-base warning */}
-            {!detectedMergeCommit && mergeability.mergeBaseMismatch && (
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  <div className="space-y-1">
-                    <p>
-                      <span className="font-medium">
-                        Incorrect merge base in PR.
-                      </span>{" "}
-                      The PR's recorded{" "}
-                      <code className="rounded bg-muted px-0.5 font-mono text-[10px]">
-                        merge-base
-                      </code>{" "}
-                      does not match the common ancestor computed from git
-                      history. The PR author's tooling likely miscalculated it —
-                      treat the PR's metadata with caution.
-                    </p>
-                    <p className="font-mono text-[10px] text-muted-foreground">
-                      claimed{" "}
-                      {mergeability.mergeBaseMismatch.claimed.slice(0, 8)} ·
-                      computed{" "}
-                      {mergeability.mergeBaseMismatch.computed.slice(0, 8)}
-                    </p>
-                    <p>
-                      This merge uses the computed base, so no commits will be
-                      orphaned.
-                    </p>
+            {mergeStep === "idle" &&
+              !detectedMergeCommit &&
+              mergeability.mergeBaseMismatch && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <div className="space-y-1">
+                      <p>
+                        <span className="font-medium">
+                          Incorrect merge base in PR.
+                        </span>{" "}
+                        The PR's recorded{" "}
+                        <code className="rounded bg-muted px-0.5 font-mono text-[10px]">
+                          merge-base
+                        </code>{" "}
+                        does not match the common ancestor computed from git
+                        history. The PR author's tooling likely miscalculated it
+                        — treat the PR's metadata with caution.
+                      </p>
+                      <p className="font-mono text-[10px] text-muted-foreground">
+                        claimed{" "}
+                        {mergeability.mergeBaseMismatch.claimed.slice(0, 8)} ·
+                        computed{" "}
+                        {mergeability.mergeBaseMismatch.computed.slice(0, 8)}
+                      </p>
+                      <p>
+                        This merge uses the computed base, so no commits will be
+                        orphaned.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
             {/* Already-merged detection hit its look-back cap */}
             {!detectedMergeCommit &&
@@ -1425,6 +1428,7 @@ function StatusIcon({
     case "loading":
       return <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />;
     case "ready":
+    case "already-merged":
     case "detected-merged":
       return <CheckCircle2 className="h-5 w-5 text-green-600" />;
     case "ready-apply-only":
@@ -1535,6 +1539,21 @@ function StatusHeadline({
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             Publish the missing merged status event to update this PR.
+          </p>
+        </div>
+      );
+    case "already-merged":
+      return (
+        <div>
+          <p className="text-sm font-medium text-green-600">
+            PR tip is already reachable from{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+              {defaultBranchName}
+            </code>
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            The PR tip is in the branch history; checking for a missing merged
+            status event.
           </p>
         </div>
       );

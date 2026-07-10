@@ -522,8 +522,12 @@ export default function PRPage() {
     );
   }, [hasRevisions, originalPRTipCommitId, prCommitHistory.commits]);
 
-  const defaultBranchName = gitPoolState.defaultBranch ?? repoState?.headBranch;
-  const defaultBranchHead = gitPoolState.latestCommit?.hash;
+  // Merges must advance the signed Nostr state head, not whichever Grasp server
+  // currently wins the git-info race. `gitPoolState.latestCommit` may point to a
+  // server head that differs from the state event while mirrors converge.
+  const defaultBranchName = repoState?.headBranch ?? gitPoolState.defaultBranch;
+  const defaultBranchHead =
+    repoState?.headCommitId ?? gitPoolState.latestCommit?.hash;
 
   const [behindCount, setBehindCount] = useState<number | undefined>(undefined);
   // false = merge base is not on the default branch (no shared ancestor)
