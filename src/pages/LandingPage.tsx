@@ -473,7 +473,7 @@ export function LandingPage() {
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-4">
               Git collaboration,{" "}
               <span className="bg-gradient-to-r from-pink-600 via-pink-500 to-rose-500 dark:from-pink-400 dark:via-pink-400 dark:to-rose-400 bg-clip-text text-transparent">
-                without the platform
+                without the platform!
               </span>
             </h1>
 
