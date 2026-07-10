@@ -99,6 +99,7 @@ export type {
   PatchEventRef,
   GraspMergeContext,
   GraspMergeTransports,
+  IssueAutoResolveContext,
   PerformMergeParams,
   PerformMergeResult,
   PerformPRMergeParams,
@@ -106,6 +107,24 @@ export type {
   PerformApplyToTipParams,
   PerformApplyToTipResult,
 } from "./merge";
+
+// --- Issue auto-resolution from commit keywords (ngit parity) ---
+export {
+  extractIssueResolutionMentions,
+  resolveIssueReference,
+  collectIssueResolutions,
+  createIssueResolutionContent,
+  signIssueResolutionStatus,
+  parseCommitsFromPackableObjects,
+} from "@/lib/issue-auto-resolve";
+export type {
+  IssueCandidate,
+  IssueReferenceToken,
+  IssueResolutionMention,
+  IssueResolution,
+  IssueReferenceResolution,
+  CollectIssueResolutionsParams,
+} from "@/lib/issue-auto-resolve";
 
 // --- Already-merged detection ---
 export {

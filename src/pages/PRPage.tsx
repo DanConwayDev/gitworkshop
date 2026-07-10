@@ -230,6 +230,7 @@ export default function PRPage() {
     repoState,
     nip05,
     prCommitId,
+    issues,
   } = useRepoContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -1573,6 +1574,7 @@ export default function PRPage() {
                             })
                           : undefined
                       }
+                      issues={issues}
                       onSuccessfulPush={handleSuccessfulPush}
                     />
                   )}

@@ -10,7 +10,9 @@
  *   2. Sign + publish the kind:30618 state to the Grasp relays ONLY
  *      (purgatory authorization).
  *   3. Push the packfile to the Grasp git server(s).
- *   4. Sign + publish the kind:1631 merged status event broadly.
+ *   4. Sign + publish the kind:1631 merged status event broadly, then
+ *      auto-resolve issues referenced by commit-message keywords in the
+ *      landed commits (ngit parity — see `@/lib/issue-auto-resolve`).
  *   5. Broadcast the kind:30618 state event to the remaining relays.
  *
  * If the push (step 3) fails, the state event expires from purgatory after
@@ -47,6 +49,12 @@ import {
   STATUS_KIND_MAP,
 } from "@/factories/StatusChangeFactory";
 import type { CommitPerson } from "@/lib/git-objects";
+import {
+  collectIssueResolutions,
+  parseCommitsFromPackableObjects,
+  signIssueResolutionStatus,
+  type IssueCandidate,
+} from "@/lib/issue-auto-resolve";
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -76,6 +84,21 @@ export interface PatchEventRef {
   pubkey: string;
 }
 
+/**
+ * Context for auto-resolving issues from commit-message keywords, mirroring
+ * ngit's push-time behaviour (see `@/lib/issue-auto-resolve`). When supplied
+ * (together with the `publishIssueStatus` transport), every commit landing on
+ * the default branch — the PR/patch commits AND the merge commit itself — is
+ * scanned for `closes/fixes/resolves/implements <issue-ref>` keywords and a
+ * kind:1631 resolved status is published for each matching issue.
+ */
+export interface IssueAutoResolveContext {
+  /** The repo's known issues (open/draft ones are eligible). */
+  issues: IssueCandidate[];
+  /** Confirmed repository maintainers (authorisation set). */
+  maintainers: string[];
+}
+
 /** Repo / branch / item context shared by every merge strategy. */
 export interface GraspMergeContext {
   /** Pubkey of the maintainer performing the merge (the signer). */
@@ -96,6 +119,12 @@ export interface GraspMergeContext {
   rootEventId: string;
   /** The PR/patch author pubkey. */
   rootAuthorPubkey: string;
+  /**
+   * When set, scan the commits landing on the default branch for issue
+   * resolution keywords and publish kind:1631 statuses for matching issues
+   * (requires the `publishIssueStatus` transport).
+   */
+  issueAutoResolve?: IssueAutoResolveContext;
 }
 
 /** Injected side-effecting transports, shared by every merge strategy. */
@@ -115,6 +144,16 @@ export interface GraspMergeTransports {
   ) => Promise<void>;
   /** Broadcast the signed kind:1631 status event to the wider relay set. */
   publishStatusBroadly: (status: NostrEvent) => Promise<void>;
+  /**
+   * Broadcast a signed kind:1631 issue-resolution status (produced by the
+   * `issueAutoResolve` scan). Receives the matched issue so callers can
+   * target the issue author's inbox relays. Required for issue
+   * auto-resolution to run.
+   */
+  publishIssueStatus?: (
+    status: NostrEvent,
+    issue: IssueCandidate,
+  ) => Promise<void>;
   /** Broadcast the signed kind:30618 state event to the remaining relays. */
   broadcastStateBroadly: (state: NostrEvent) => Promise<void>;
   /**
@@ -217,6 +256,53 @@ interface MergeSequenceResult {
   state: NostrEvent;
   /** The signed kind:1631 status event. */
   status: NostrEvent;
+  /**
+   * Signed kind:1631 statuses for issues auto-resolved from commit-message
+   * keywords (empty when none matched or auto-resolution was not wired up).
+   */
+  issueStatuses: NostrEvent[];
+}
+
+/**
+ * Scan every commit in the pushed object set for issue resolution keywords
+ * (ngit parity: the PR/patch commits and the merge commit itself all land on
+ * the default branch with this push), then sign + publish one kind:1631
+ * status per matched issue. Failures here never fail the merge — the push
+ * has already succeeded — so each issue is attempted independently.
+ */
+async function publishIssueResolutions(
+  params: GraspMergeContext & GraspMergeTransports,
+  newTipHash: string,
+  objects: PackableObject[],
+): Promise<NostrEvent[]> {
+  const { issueAutoResolve, publishIssueStatus } = params;
+  if (!issueAutoResolve || !publishIssueStatus) return [];
+
+  const resolutions = collectIssueResolutions({
+    commits: parseCommitsFromPackableObjects(objects),
+    newTipHash,
+    issues: issueAutoResolve.issues,
+    signerPubkey: params.signerPubkey,
+    maintainers: issueAutoResolve.maintainers,
+  });
+
+  const published: NostrEvent[] = [];
+  for (const resolution of resolutions) {
+    try {
+      const status = await signIssueResolutionStatus({
+        signer: params.signer,
+        signerPubkey: params.signerPubkey,
+        repoCoords: params.repoCoords,
+        resolution,
+      });
+      await publishIssueStatus(status, resolution.issue);
+      params.onEvent?.(status);
+      published.push(status);
+    } catch {
+      // Best-effort: a failed issue status must not fail the merge.
+    }
+  }
+  return published;
 }
 
 /**
@@ -274,13 +360,21 @@ async function runMergeSequence(
   await params.publishStatusBroadly(status);
   params.onEvent?.(status);
 
+  // Issue auto-resolution from commit keywords (ngit parity). Runs after the
+  // merged status so the primary status always lands first.
+  const issueStatuses = await publishIssueResolutions(
+    params,
+    newTipHash,
+    objects,
+  );
+
   // ── Step 5: Broadcast state to remaining relays ─────────────────────────
   params.onStep?.("broadcasting-state");
   await params.broadcastStateBroadly(state);
 
   params.onStep?.("done");
 
-  return { state, status };
+  return { state, status, issueStatuses };
 }
 
 // ---------------------------------------------------------------------------
@@ -359,14 +453,14 @@ export async function performMerge(
 
   const allObjects: PackableObject[] = [...params.chainObjects, mergeCommit];
 
-  const { state, status } = await runMergeSequence(
+  const { state, status, issueStatuses } = await runMergeSequence(
     params,
     mergeCommit.hash,
     allObjects,
     params.patchEventIds ?? [],
   );
 
-  return { mergeCommit, state, status };
+  return { mergeCommit, state, status, issueStatuses };
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +525,7 @@ export async function performPRMerge(
     ...params.extraObjects,
   ];
 
-  const { state, status } = await runMergeSequence(
+  const { state, status, issueStatuses } = await runMergeSequence(
     params,
     params.mergeCommitObj.hash,
     allObjects,
@@ -441,6 +535,7 @@ export async function performPRMerge(
     mergeCommit: params.mergeCommitObj,
     state,
     status,
+    issueStatuses,
     pushedObjects: allObjects,
   };
 }
@@ -479,12 +574,17 @@ export async function performApplyToTip(
 ): Promise<PerformApplyToTipResult> {
   params.onStep?.("building");
 
-  const { state, status } = await runMergeSequence(
+  const { state, status, issueStatuses } = await runMergeSequence(
     params,
     params.newTipCommitHash,
     params.objects,
     params.patchEventIds ?? [],
   );
 
-  return { state, status, newTipCommitHash: params.newTipCommitHash };
+  return {
+    state,
+    status,
+    issueStatuses,
+    newTipCommitHash: params.newTipCommitHash,
+  };
 }
