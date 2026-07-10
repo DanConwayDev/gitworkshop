@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GitWorkshop</string>
+    <string name="title_activity_main">GitWorkshop</string>
+    <string name="package_name">dev.gitworkshop.app</string>
+    <string name="custom_url_scheme">dev.gitworkshop.app</string>
+</resources>
