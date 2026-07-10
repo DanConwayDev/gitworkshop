@@ -594,8 +594,8 @@ export default function NgitPage() {
                       If you push to GitHub, Codeberg, Bitbucket, etc., consider
                       disabling their PRs and issues so everything is managed on
                       Nostr. For GitHub, use{" "}
-                      <em>Repo Settings &gt; Features</em> for issues (disabling
-                      PRs is not yet possible on GitHub).
+                      <em>Repo Settings &gt; Features</em> to disable issues and
+                      pull requests.
                     </p>
                   </div>
                 </div>
