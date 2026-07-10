@@ -28,6 +28,7 @@ import type { RelayGroupSpec } from "@/hooks/useEventSearch";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { gitIndexRelays, fallbackRelays } from "@/services/settings";
 import { useGitPool } from "@/hooks/useGitPool";
+import { useAuthoritativeDefaultBranch } from "@/hooks/useAuthoritativeDefaultBranch";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import {
   StatusDropdownBadge,
@@ -522,12 +523,14 @@ export default function PRPage() {
     );
   }, [hasRevisions, originalPRTipCommitId, prCommitHistory.commits]);
 
-  // Merges must advance the signed Nostr state head, not whichever Grasp server
-  // currently wins the git-info race. `gitPoolState.latestCommit` may point to a
-  // server head that differs from the state event while mirrors converge.
-  const defaultBranchName = repoState?.headBranch ?? gitPoolState.defaultBranch;
-  const defaultBranchHead =
-    repoState?.headCommitId ?? gitPoolState.latestCommit?.hash;
+  // Mergeability evaluation and merge pushes must target the authoritative
+  // default-branch tip. That is usually the signed Nostr state head (never
+  // `gitPoolState.latestCommit`, which can point at whichever server won the
+  // git-info race while mirrors converge after a push) — but when a git server
+  // is verifiably ahead of the signed state, the git head is authoritative.
+  // See useAuthoritativeDefaultBranch for the full reasoning.
+  const { defaultBranchName, defaultBranchHead } =
+    useAuthoritativeDefaultBranch(gitPool, gitPoolState, repoState);
 
   const [behindCount, setBehindCount] = useState<number | undefined>(undefined);
   // false = merge base is not on the default branch (no shared ancestor)
@@ -1022,7 +1025,7 @@ export default function PRPage() {
           backLabel="PR commits"
           hasCommitId={patchMatch.hasCommitId}
           patchChain={commitDetailPatchChain.chain}
-          defaultBranchHead={gitPoolState.latestCommit?.hash}
+          defaultBranchHead={defaultBranchHead}
           superseded={patchMatch.superseded}
           isBaseGuessed={commitDetailPatchMergeBase.isGuessed}
           guessedBaseCommitId={
@@ -1083,7 +1086,7 @@ export default function PRPage() {
     patchMatch,
     gitPool,
     gitPoolState.winnerUrl,
-    gitPoolState.latestCommit?.hash,
+    defaultBranchHead,
     cloneUrls,
     prCloneUrls,
     prBasePath,
