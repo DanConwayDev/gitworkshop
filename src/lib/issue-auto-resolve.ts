@@ -2,11 +2,11 @@
  * issue-auto-resolve — resolve issues from commit-message keywords at merge
  * time, mirroring ngit's push-time behaviour.
  *
- * ngit (`git-remote-nostr` push) scans every commit landing on the default
- * branch for resolution keywords followed by issue references and publishes a
- * kind:1631 (resolved/applied) status event for each matching issue. This
- * module ports that parser and event shape so merging through the web UI is
- * back-to-back compatible with merging via ngit:
+ * ngit (`git-remote-nostr` push) scans the default-branch ref-update delta
+ * (`oldRef..newTip`) for resolution keywords followed by issue references and
+ * publishes a kind:1631 (resolved/applied) status event for each matching
+ * issue. This module ports that parser, walk boundary, and event shape so
+ * merging through the web UI is back-to-back compatible with merging via ngit:
  *
  *   - Verbs: close/closes/closed/closing, fix/fixes/fixed/fixing,
  *     resolve/resolves/resolved/resolving,
@@ -18,7 +18,8 @@
  *     starts with the prefix — ambiguous prefixes are skipped.
  *   - Only the issue author or a repository maintainer may auto-resolve.
  *   - Issues already resolved or closed are skipped; each issue is resolved
- *     at most once per merge (youngest referencing commit wins).
+ *     at most once per state-event default-branch update (youngest referencing
+ *     commit wins).
  *   - Status content records the triggering phrase plus
  *     `resolved by commit <source>[, when merged in commit <merge>]`, and the
  *     event carries `r` tags for the source (and merge) commit alongside an
@@ -249,11 +250,17 @@ export function parseCommitsFromPackableObjects(
 }
 
 /**
- * Order commits youngest-first by walking parent edges from the new tip
- * (matching ngit's `ahead` revwalk order). Commits not reachable from the
- * tip within the set are appended at the end.
+ * Order commits youngest-first by walking parent edges from the new tip until
+ * a previous ref value is reached (ngit parity: revwalk `oldRef..newTip`).
+ * Commits that are present in the packfile but not reachable from `tipHash`
+ * within this stop boundary are intentionally excluded: they did not land in
+ * this kind:30618 state-event default-branch update.
  */
-function orderCommitsYoungestFirst(commits: Commit[], tipHash: string) {
+function orderCommitsYoungestFirst(
+  commits: Commit[],
+  tipHash: string,
+  stopAtHashes: Set<string>,
+) {
   const byHash = new Map(commits.map((c) => [c.hash, c]));
   const ordered: Commit[] = [];
   const visited = new Set<string>();
@@ -263,14 +270,11 @@ function orderCommitsYoungestFirst(commits: Commit[], tipHash: string) {
     const hash = queue.shift()!;
     if (visited.has(hash)) continue;
     visited.add(hash);
+    if (stopAtHashes.has(hash)) continue;
     const commit = byHash.get(hash);
     if (!commit) continue;
     ordered.push(commit);
     queue.push(...commit.parents);
-  }
-
-  for (const commit of commits) {
-    if (!visited.has(commit.hash)) ordered.push(commit);
   }
 
   return { ordered, byHash };
@@ -320,12 +324,15 @@ function findMergeCommitForSourceCommit(
 /** Inputs for {@link collectIssueResolutions}. */
 export interface CollectIssueResolutionsParams {
   /**
-   * Every commit landing on the default branch with this merge — the PR /
-   * patch-chain commits plus the merge commit itself (in any order).
+   * Commit objects available to inspect. The actual scan set is not this
+   * whole array; it is the state-event default-branch ref delta obtained by
+   * walking parents from `newTipHash` until `stopAtHashes`.
    */
   commits: Commit[];
   /** The new branch tip (the merge commit, or the last replayed commit). */
   newTipHash: string;
+  /** Previous default-branch ref values that bound the `oldRef..newTip` walk. */
+  stopAtHashes: Iterable<string>;
   /** The repo's known issues. */
   issues: IssueCandidate[];
   /** Pubkey of the maintainer performing the merge. */
@@ -337,19 +344,31 @@ export interface CollectIssueResolutionsParams {
 }
 
 /**
- * Scan the commits landing on the default branch for resolution mentions and
- * return the deduplicated set of issues to mark resolved, with commit
- * attribution matching ngit (each source commit attributed to the merge
- * commit that introduced it).
+ * Scan the commits introduced by the kind:30618 default-branch ref update for
+ * resolution mentions and return the deduplicated set of issues to mark
+ * resolved. The scan set mirrors ngit's revwalk of `oldRef..newTip`: commits
+ * are visited youngest-first from the new tip and the walk stops before any
+ * previous ref value in `stopAtHashes`.
  */
 export function collectIssueResolutions(
   params: CollectIssueResolutionsParams,
 ): IssueResolution[] {
-  const { commits, newTipHash, issues, signerPubkey, maintainers } = params;
+  const {
+    commits,
+    newTipHash,
+    stopAtHashes,
+    issues,
+    signerPubkey,
+    maintainers,
+  } = params;
   const warn = params.warn ?? (() => undefined);
   if (commits.length === 0 || issues.length === 0) return [];
 
-  const { ordered, byHash } = orderCommitsYoungestFirst(commits, newTipHash);
+  const { ordered, byHash } = orderCommitsYoungestFirst(
+    commits,
+    newTipHash,
+    new Set(stopAtHashes),
+  );
   const mergeCommitsInPush = ordered
     .filter((c) => c.parents.length > 1)
     .map((c) => c.hash);
