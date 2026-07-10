@@ -455,7 +455,21 @@ export default function NgitPage() {
                   </div>
 
                   <div>
-                    <h4 className="font-medium mb-1">3. Submit a PR</h4>
+                    <h4 className="font-medium mb-1">
+                      3. Sign in or create a Nostr account
+                    </h4>
+                    <p className="text-muted-foreground mb-2">
+                      Use an existing Nostr key, or create one before sending
+                      your first PR:
+                    </p>
+                    <div className="space-y-1">
+                      <CodeBlock>ngit account login</CodeBlock>
+                      <CodeBlock>ngit account create --name alice</CodeBlock>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1">4. Submit a PR</h4>
                     <p className="text-muted-foreground mb-2">
                       Push a branch with the{" "}
                       <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
@@ -475,10 +489,10 @@ export default function NgitPage() {
                   </div>
 
                   <div>
-                    <h4 className="font-medium mb-1">4. View open PRs</h4>
+                    <h4 className="font-medium mb-1">5. View open PRs</h4>
                     <CodeBlock>git branch -r --list origin/pr/*</CodeBlock>
                     <p className="text-muted-foreground mt-1">Or with ngit:</p>
-                    <CodeBlock>ngit list</CodeBlock>
+                    <CodeBlock>ngit pr list</CodeBlock>
                   </div>
                 </div>
               </div>
@@ -502,7 +516,21 @@ export default function NgitPage() {
                 <div className="space-y-4 text-sm">
                   <div>
                     <h4 className="font-medium mb-1">
-                      1. Create a local git repo
+                      1. Sign in or create a Nostr account
+                    </h4>
+                    <p className="text-muted-foreground mb-2">
+                      Use an existing Nostr key, or create a new one before
+                      publishing a repo:
+                    </p>
+                    <div className="space-y-1">
+                      <CodeBlock>ngit account login</CodeBlock>
+                      <CodeBlock>ngit account create --name alice</CodeBlock>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1">
+                      2. Create a local git repo
                     </h4>
                     <div className="space-y-1">
                       <CodeBlock>git init</CodeBlock>
@@ -511,37 +539,40 @@ export default function NgitPage() {
                   </div>
 
                   <div>
-                    <h4 className="font-medium mb-1">2. Initialise on Nostr</h4>
+                    <h4 className="font-medium mb-1">3. Initialise on Nostr</h4>
                     <CodeBlock>ngit init</CodeBlock>
                   </div>
 
                   <div>
-                    <h4 className="font-medium mb-1">3. View PRs</h4>
+                    <h4 className="font-medium mb-1">4. View PRs</h4>
                     <CodeBlock>git branch -r --list origin/pr/*</CodeBlock>
                     <p className="text-muted-foreground mt-1">
                       Or with ngit (includes apply options):
                     </p>
-                    <CodeBlock>ngit list</CodeBlock>
+                    <CodeBlock>ngit pr list</CodeBlock>
                   </div>
 
                   <div>
                     <h4 className="font-medium mb-1">
-                      4. Merge / incorporate PRs
+                      5. Merge / incorporate PRs
                     </h4>
                     <p className="text-muted-foreground mb-2">
-                      PR status is automatically updated when you merge the
-                      branch:
+                      Use ngit to merge a checked-out PR branch, or pass a PR
+                      event ID / nevent directly:
                     </p>
                     <div className="space-y-1">
-                      <CodeBlock>git checkout master</CodeBlock>
-                      <CodeBlock>git merge pr/great-feature</CodeBlock>
-                      <CodeBlock>git push</CodeBlock>
+                      <CodeBlock>
+                        ngit pr checkout &lt;nevent123|id&gt;
+                      </CodeBlock>
+                      <CodeBlock>ngit merge</CodeBlock>
+                      <CodeBlock>ngit merge &lt;nevent123|id&gt;</CodeBlock>
+                      <CodeBlock>git push origin main</CodeBlock>
                     </div>
                   </div>
 
                   <div>
                     <h4 className="font-medium mb-1">
-                      5. Consider disabling PRs and issues elsewhere
+                      6. Consider disabling PRs and issues elsewhere
                     </h4>
                     <p className="text-muted-foreground">
                       If you push to GitHub, Codeberg, Bitbucket, etc., consider
