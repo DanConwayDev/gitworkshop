@@ -557,16 +557,29 @@ export default function NgitPage() {
                       5. Merge / incorporate PRs
                     </h4>
                     <p className="text-muted-foreground mb-2">
-                      Use ngit to merge a checked-out PR branch, or pass a PR
-                      event ID / nevent directly:
+                      Choose one merge command, then push the merge commit:
                     </p>
-                    <div className="space-y-1">
-                      <CodeBlock>
-                        ngit pr checkout &lt;nevent123|id&gt;
-                      </CodeBlock>
-                      <CodeBlock>ngit merge</CodeBlock>
-                      <CodeBlock>ngit merge &lt;nevent123|id&gt;</CodeBlock>
-                      <CodeBlock>git push origin main</CodeBlock>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-muted-foreground">
+                          From a checked-out PR branch:
+                        </p>
+                        <CodeBlock>
+                          ngit pr checkout &lt;nevent123|id&gt; && ngit merge
+                        </CodeBlock>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">
+                          Or from anywhere using the PR event ID / nevent:
+                        </p>
+                        <CodeBlock>ngit merge &lt;nevent123|id&gt;</CodeBlock>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">
+                          After either merge, publish it:
+                        </p>
+                        <CodeBlock>git push origin main</CodeBlock>
+                      </div>
                     </div>
                   </div>
 
