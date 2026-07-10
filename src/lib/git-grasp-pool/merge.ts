@@ -121,6 +121,13 @@ export interface GraspMergeContext {
   /** The PR/patch author pubkey. */
   rootAuthorPubkey: string;
   /**
+   * Extra commit objects used only by issue auto-resolution. These are not
+   * pushed. They cover the case where the authoritative git server is already
+   * ahead of the previous signed state, so the kind:30618 update being signed
+   * is `oldStateHead..newTip`, not just `defaultBranchHead..newTip`.
+   */
+  issueScanObjects?: PackableObject[];
+  /**
    * When set, scan the commits landing on the default branch for issue
    * resolution keywords and publish kind:1631 statuses for matching issues
    * (requires the `publishIssueStatus` transport).
@@ -218,6 +225,28 @@ function getStateRefCommit(
   return getStateRefs(state).find((ref) => ref.name === refName)?.commitId;
 }
 
+/** True when `ancestorHash` is reachable from `fromHash` within these commits. */
+function canReachCommitWithin(
+  commits: ReturnType<typeof parseCommitsFromPackableObjects>,
+  fromHash: string,
+  ancestorHash: string,
+): boolean {
+  const byHash = new Map(commits.map((commit) => [commit.hash, commit]));
+  const queue = [fromHash];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const hash = queue.shift()!;
+    if (hash === ancestorHash) return true;
+    if (visited.has(hash)) continue;
+    visited.add(hash);
+    const commit = byHash.get(hash);
+    if (commit) queue.push(...commit.parents);
+  }
+
+  return false;
+}
+
 /**
  * Sign the kind:1631 merged status event for a merged PR/patch. Also used on
  * its own by the "mark detected merge as merged" flow, which publishes the
@@ -297,14 +326,33 @@ async function publishIssueResolutions(
     params.currentStateEvent,
     defaultBranchRef,
   );
+  const commitsToScan = parseCommitsFromPackableObjects([
+    ...objects,
+    ...(params.issueScanObjects ?? []),
+  ]);
+
+  // If the signed state is behind the authoritative git head, the state event
+  // we just signed advances refs/heads/<default> from oldStateHead all the way
+  // to newTipHash. In that case, scan oldStateHead..newTip and include the
+  // git-head commits supplied via issueScanObjects. If oldStateHead is not
+  // reachable from defaultBranchHead within the scan objects, treat the git
+  // server as lagging/diverged and also stop at defaultBranchHead to avoid
+  // re-scanning commits already covered by the previous signed state.
+  const gitHeadIsAheadOfState =
+    !!oldStateHead &&
+    oldStateHead !== params.defaultBranchHead &&
+    canReachCommitWithin(commitsToScan, params.defaultBranchHead, oldStateHead);
   const stopAtHashes = new Set(
-    [oldStateHead, params.defaultBranchHead].filter(
+    [
+      oldStateHead,
+      gitHeadIsAheadOfState ? undefined : params.defaultBranchHead,
+    ].filter(
       (hash): hash is string => typeof hash === "string" && hash.length > 0,
     ),
   );
 
   const resolutions = collectIssueResolutions({
-    commits: parseCommitsFromPackableObjects(objects),
+    commits: commitsToScan,
     newTipHash,
     stopAtHashes,
     issues: issueAutoResolve.issues,

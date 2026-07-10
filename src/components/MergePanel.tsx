@@ -87,9 +87,16 @@ import { outboxStore } from "@/services/outbox";
 import type { CommitPerson } from "@/lib/git-objects";
 import type { PackableObject } from "@/lib/git-packfile";
 import type { Patch } from "@/casts/Patch";
-import type { ResolvedRepo, ResolvedPR, ResolvedIssueLite } from "@/lib/nip34";
+import {
+  getStateRefs,
+  type ResolvedRepo,
+  type ResolvedPR,
+  type ResolvedIssueLite,
+} from "@/lib/nip34";
 
 const PR_BRANCH_OBJECT_FETCH_TIMEOUT_MS = 90_000;
+const ISSUE_STATE_DELTA_FETCH_TIMEOUT_MS = 30_000;
+const ISSUE_STATE_DELTA_MAX_DEPTH = 500;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -250,6 +257,52 @@ async function fetchPRBranchObjectsWithTimeout(
     }
 
     return objects;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
+async function fetchIssueScanObjectsForStateDelta(
+  gitPool: GitGraspPool,
+  currentStateEvent: NostrEvent | null | undefined,
+  defaultBranchName: string,
+  defaultBranchHead: string,
+  fallbackUrls: string[],
+): Promise<PackableObject[]> {
+  const oldStateHead = currentStateEvent
+    ? getStateRefs(currentStateEvent).find(
+        (ref) => ref.name === `refs/heads/${defaultBranchName}`,
+      )?.commitId
+    : undefined;
+  if (!oldStateHead || oldStateHead === defaultBranchHead) return [];
+
+  const abort = new AbortController();
+  const timeout = globalThis.setTimeout(
+    () => abort.abort(),
+    ISSUE_STATE_DELTA_FETCH_TIMEOUT_MS,
+  );
+
+  try {
+    const history = await gitPool.getCommitHistory(
+      defaultBranchHead,
+      ISSUE_STATE_DELTA_MAX_DEPTH,
+      abort.signal,
+      fallbackUrls,
+      oldStateHead,
+    );
+    if (!history?.some((commit) => commit.hash === oldStateHead)) return [];
+
+    return (
+      (await gitPool.getPackableObjectsForCommitRange(
+        defaultBranchHead,
+        oldStateHead,
+        abort.signal,
+        fallbackUrls,
+        ISSUE_STATE_DELTA_MAX_DEPTH,
+      )) ?? []
+    );
+  } catch {
+    return [];
   } finally {
     globalThis.clearTimeout(timeout);
   }
@@ -644,6 +697,15 @@ export function MergePanel({
       const { transports, getPushSummary } = createMergeTransports(
         account.pubkey,
       );
+      const issueScanObjects = issueAutoResolve
+        ? await fetchIssueScanObjectsForStateDelta(
+            gitPool,
+            currentStateEvent,
+            defaultBranchName,
+            defaultBranchHead,
+            effectiveCloneUrls,
+          )
+        : [];
 
       const { mergeCommit, issueStatuses } = await performMerge({
         signer: account.signer,
@@ -658,6 +720,7 @@ export function MergePanel({
         repoCoords: pr.repoCoords,
         rootEventId: pr.rootEvent.id,
         rootAuthorPubkey: pr.pubkey,
+        issueScanObjects,
         issueAutoResolve,
         subject: pr.currentSubject || pr.originalSubject,
         prNevent: buildPRNevent(pr.rootEvent.id, pr.pubkey, repo.relays),
@@ -686,6 +749,7 @@ export function MergePanel({
     currentStateEvent,
     defaultBranchName,
     gitPool,
+    effectiveCloneUrls,
     pr,
     patchEventIds,
     issueAutoResolve,
@@ -716,6 +780,15 @@ export function MergePanel({
       const { transports, getPushSummary } = createMergeTransports(
         account.pubkey,
       );
+      const issueScanObjects = issueAutoResolve
+        ? await fetchIssueScanObjectsForStateDelta(
+            gitPool,
+            currentStateEvent,
+            defaultBranchName,
+            defaultBranchHead,
+            effectiveCloneUrls,
+          )
+        : [];
 
       const { newTipCommitHash, issueStatuses } = await performApplyToTip({
         signer: account.signer,
@@ -729,6 +802,7 @@ export function MergePanel({
         repoCoords: pr.repoCoords,
         rootEventId: pr.rootEvent.id,
         rootAuthorPubkey: pr.pubkey,
+        issueScanObjects,
         issueAutoResolve,
         patchEventIds,
         ...transports,
@@ -750,6 +824,7 @@ export function MergePanel({
     currentStateEvent,
     defaultBranchName,
     gitPool,
+    effectiveCloneUrls,
     pr,
     patchChain,
     patchEventIds,
@@ -780,6 +855,15 @@ export function MergePanel({
       const { transports, getPushSummary } = createMergeTransports(
         account.pubkey,
       );
+      const issueScanObjects = issueAutoResolve
+        ? await fetchIssueScanObjectsForStateDelta(
+            gitPool,
+            currentStateEvent,
+            defaultBranchName,
+            defaultBranchHead,
+            effectiveCloneUrls,
+          )
+        : [];
 
       const { mergeCommit, issueStatuses } = await performPRMerge({
         signer: account.signer,
@@ -795,6 +879,7 @@ export function MergePanel({
         repoCoords: pr.repoCoords,
         rootEventId: pr.rootEvent.id,
         rootAuthorPubkey: pr.pubkey,
+        issueScanObjects,
         issueAutoResolve,
         fetchBranchObjects: (tipCommitHash, stopAtCommitHash) =>
           fetchPRBranchObjectsWithTimeout(
