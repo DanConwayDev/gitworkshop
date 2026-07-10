@@ -257,10 +257,6 @@ export function RepoAboutPanel({ repo, variant }: RepoAboutPanelProps) {
       ? `nostr://${identitySegment}/${relayHint}/${encodedDTag}`
       : `nostr://${identitySegment}/${encodedDTag}`
     : undefined;
-  const nostrCloneCommand = nostrCloneUrl
-    ? `git clone ${nostrCloneUrl}`
-    : undefined;
-
   const hasAnyCloneUrl =
     repo.graspCloneUrls.length > 0 || repo.additionalGitServerUrls.length > 0;
 
@@ -268,20 +264,13 @@ export function RepoAboutPanel({ repo, variant }: RepoAboutPanelProps) {
     return (
       <SidebarVariant
         repo={repo}
-        nostrCloneCommand={nostrCloneCommand}
         nostrCloneUrl={nostrCloneUrl}
         hasAnyCloneUrl={hasAnyCloneUrl}
       />
     );
   }
 
-  return (
-    <FullVariant
-      repo={repo}
-      nostrCloneUrl={nostrCloneUrl}
-      nostrCloneCommand={nostrCloneCommand}
-    />
-  );
+  return <FullVariant repo={repo} nostrCloneUrl={nostrCloneUrl} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -290,12 +279,10 @@ export function RepoAboutPanel({ repo, variant }: RepoAboutPanelProps) {
 
 function SidebarVariant({
   repo,
-  nostrCloneCommand,
   nostrCloneUrl,
   hasAnyCloneUrl,
 }: {
   repo: ResolvedRepo;
-  nostrCloneCommand: string | undefined;
   nostrCloneUrl: string | undefined;
   hasAnyCloneUrl: boolean;
 }) {
@@ -327,9 +314,8 @@ function SidebarVariant({
   return (
     <div className="space-y-3 min-w-0">
       {/* Clone button */}
-      {(nostrCloneCommand || hasAnyCloneUrl) && (
+      {(nostrCloneUrl || hasAnyCloneUrl) && (
         <CloneDropdown
-          nostrCloneCommand={nostrCloneCommand}
           nostrCloneUrl={nostrCloneUrl}
           graspCloneUrls={repo.graspCloneUrls}
           additionalGitServerUrls={repo.additionalGitServerUrls}
@@ -565,11 +551,9 @@ function SidebarVariant({
 function FullVariant({
   repo,
   nostrCloneUrl,
-  nostrCloneCommand,
 }: {
   repo: ResolvedRepo;
   nostrCloneUrl: string | undefined;
-  nostrCloneCommand: string | undefined;
 }) {
   const { nip05 } = useRepoContext();
   const account = useActiveAccount();
@@ -822,9 +806,7 @@ function FullVariant({
           </h3>
 
           {/* nostr:// address — field style matching CloneDropdown */}
-          {nostrCloneUrl && nostrCloneCommand && (
-            <NgitCloneField command={nostrCloneCommand} />
-          )}
+          {nostrCloneUrl && <NgitCloneField cloneUrl={nostrCloneUrl} />}
 
           {/* Git server URLs with explanatory heading */}
           {repo.cloneUrls.length > 0 && (
@@ -885,21 +867,21 @@ function FullVariant({
 }
 
 // ---------------------------------------------------------------------------
-// NgitCloneField — field-style clone command matching the CloneDropdown look
+// NgitCloneField — field-style clone URL matching the CloneDropdown look
 // ---------------------------------------------------------------------------
 
-function NgitCloneField({ command }: { command: string }) {
+function NgitCloneField({ cloneUrl }: { cloneUrl: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(command);
+      await navigator.clipboard.writeText(cloneUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
       /* clipboard unavailable */
     }
-  }, [command]);
+  }, [cloneUrl]);
 
   return (
     <div className="space-y-1.5">
@@ -921,7 +903,7 @@ function NgitCloneField({ command }: { command: string }) {
       <button
         type="button"
         onClick={handleCopy}
-        title="Copy command"
+        title="Copy nostr:// URL"
         className={cn(
           "w-full flex items-center gap-1.5 rounded-md border px-3 py-2 min-w-0 text-left transition-colors cursor-pointer",
           copied
@@ -931,9 +913,9 @@ function NgitCloneField({ command }: { command: string }) {
       >
         <code
           className="flex-1 text-xs font-mono text-foreground/90 truncate min-w-0 select-none"
-          title={command}
+          title={cloneUrl}
         >
-          {command}
+          {cloneUrl}
         </code>
         <span className="shrink-0 text-muted-foreground transition-colors p-0.5 rounded">
           {copied ? (
@@ -1711,24 +1693,22 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 // ---------------------------------------------------------------------------
 
 function CloneDropdown({
-  nostrCloneCommand,
   nostrCloneUrl,
   graspCloneUrls,
   additionalGitServerUrls,
 }: {
-  nostrCloneCommand: string | undefined;
   nostrCloneUrl: string | undefined;
   graspCloneUrls: string[];
   additionalGitServerUrls: string[];
 }) {
   const [open, setOpen] = useState(false);
-  const [copiedCommand, setCopiedCommand] = useState(false);
+  const [copiedNostrUrl, setCopiedNostrUrl] = useState(false);
 
-  const handleCopyCommand = async () => {
-    if (!nostrCloneCommand) return;
-    await navigator.clipboard.writeText(nostrCloneCommand);
-    setCopiedCommand(true);
-    setTimeout(() => setCopiedCommand(false), 2000);
+  const handleCopyNostrUrl = async () => {
+    if (!nostrCloneUrl) return;
+    await navigator.clipboard.writeText(nostrCloneUrl);
+    setCopiedNostrUrl(true);
+    setTimeout(() => setCopiedNostrUrl(false), 2000);
   };
 
   const hasRawUrls =
@@ -1761,7 +1741,7 @@ function CloneDropdown({
         sideOffset={4}
       >
         {/* ngit section */}
-        {nostrCloneCommand && nostrCloneUrl && (
+        {nostrCloneUrl && (
           <div className="p-3 space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-foreground">
@@ -1777,26 +1757,26 @@ function CloneDropdown({
                 <ExternalLink className="h-3 w-3" />
               </a>
             </div>
-            {/* Command block — entire field is the copy button */}
+            {/* URL block — entire field is the copy button */}
             <button
               type="button"
-              onClick={handleCopyCommand}
-              title="Copy command"
+              onClick={handleCopyNostrUrl}
+              title="Copy nostr:// URL"
               className={cn(
                 "w-full flex items-center gap-1.5 rounded-md border px-3 py-2 min-w-0 text-left transition-colors cursor-pointer",
-                copiedCommand
+                copiedNostrUrl
                   ? "border-green-500/60 bg-green-500/5"
                   : "border-border bg-muted/50 hover:bg-muted hover:border-border/80",
               )}
             >
               <code
                 className="flex-1 text-xs font-mono text-foreground/90 truncate min-w-0 select-none"
-                title={nostrCloneCommand}
+                title={nostrCloneUrl}
               >
-                {nostrCloneCommand}
+                {nostrCloneUrl}
               </code>
               <span className="shrink-0 text-muted-foreground p-0.5 rounded">
-                {copiedCommand ? (
+                {copiedNostrUrl ? (
                   <Check className="h-3.5 w-3.5 text-green-500" />
                 ) : (
                   <Copy className="h-3.5 w-3.5" />
@@ -1809,7 +1789,7 @@ function CloneDropdown({
         {/* Raw git URLs */}
         {hasRawUrls && (
           <>
-            {nostrCloneCommand && <Separator />}
+            {nostrCloneUrl && <Separator />}
             <div className="p-3 space-y-2">
               <div className="flex items-center gap-1.5">
                 <p className="text-xs font-semibold text-foreground">
