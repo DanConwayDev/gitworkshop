@@ -1,0 +1,32 @@
+name: Test Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Verify npm fallback lockfile
+        run: nix develop --command npm ci --dry-run --ignore-scripts
+
+      - name: Install Dependencies
+        run: nix develop --command pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: nix develop --command pnpm test
+
+      - name: Run e2e tests
+        run: nix develop --command pnpm test:e2e
