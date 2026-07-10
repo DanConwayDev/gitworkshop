@@ -544,28 +544,34 @@ export default function NgitPage() {
                   <div>
                     <h4 className="font-medium mb-1">3. Initialise on Nostr</h4>
                     <CodeBlock>ngit init</CodeBlock>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium mb-1">4. View PRs</h4>
-                    <CodeBlock>git branch -r --list origin/pr/*</CodeBlock>
-                    <p className="text-muted-foreground mt-1">
-                      Or with ngit (includes apply options):
+                    <p className="text-muted-foreground mt-2">
+                      Then push as you normally would. ngit configures a normal
+                      git remote that works with standard git commands:
                     </p>
-                    <CodeBlock>ngit pr list</CodeBlock>
+                    <CodeBlock>git push -u origin main</CodeBlock>
                   </div>
 
                   <div>
                     <h4 className="font-medium mb-1">
-                      5. Merge / incorporate PRs
+                      4. Browse and merge PRs
                     </h4>
-                    <p className="text-muted-foreground mb-2">
-                      Choose one merge command, then push the merge commit:
+                    <p className="text-muted-foreground mb-3">
+                      You can browse and merge PRs from{" "}
+                      <Link to="/" className="text-pink-500 hover:underline">
+                        gitworkshop.dev
+                      </Link>
+                      , or manage them locally with git and ngit.
                     </p>
                     <div className="space-y-3">
                       <div>
+                        <p className="text-muted-foreground">Browse PRs:</p>
+                        <CodeBlock>git branch -r --list origin/pr/*</CodeBlock>
+                        <p className="text-muted-foreground">Or with ngit:</p>
+                        <CodeBlock>ngit pr list</CodeBlock>
+                      </div>
+                      <div>
                         <p className="text-muted-foreground">
-                          From a checked-out PR branch:
+                          Merge from a checked-out PR branch:
                         </p>
                         <CodeBlock>
                           ngit pr checkout &lt;nevent123|id&gt; && ngit merge
@@ -588,7 +594,7 @@ export default function NgitPage() {
 
                   <div>
                     <h4 className="font-medium mb-1">
-                      6. Consider disabling PRs and issues elsewhere
+                      5. Consider disabling PRs and issues elsewhere
                     </h4>
                     <p className="text-muted-foreground">
                       If you push to GitHub, Codeberg, Bitbucket, etc., consider
