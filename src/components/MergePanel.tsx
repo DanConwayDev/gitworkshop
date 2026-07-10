@@ -77,6 +77,8 @@ import {
   getGitRemoteHostname,
   type GitGraspPool,
   type GraspMergeTransports,
+  type IssueAutoResolveContext,
+  type IssueCandidate,
   type PushDeliverySummary,
 } from "@/lib/git-grasp-pool";
 import { pool as relayPool, eventStore } from "@/services/nostr";
@@ -85,9 +87,16 @@ import { outboxStore } from "@/services/outbox";
 import type { CommitPerson } from "@/lib/git-objects";
 import type { PackableObject } from "@/lib/git-packfile";
 import type { Patch } from "@/casts/Patch";
-import type { ResolvedRepo, ResolvedPR } from "@/lib/nip34";
+import {
+  getStateRefs,
+  type ResolvedRepo,
+  type ResolvedPR,
+  type ResolvedIssueLite,
+} from "@/lib/nip34";
 
 const PR_BRANCH_OBJECT_FETCH_TIMEOUT_MS = 90_000;
+const ISSUE_STATE_DELTA_FETCH_TIMEOUT_MS = 30_000;
+const ISSUE_STATE_DELTA_MAX_DEPTH = 500;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -126,6 +135,13 @@ interface MergePanelProps {
    * Required for PR-type items (used in the merge commit message).
    */
   prNevent?: string;
+  /**
+   * The repo's known issues (from RepoContext). Used to auto-resolve issues
+   * referenced by `closes/fixes/resolves/implements` keywords in the commit
+   * messages landing with the merge — including the merge commit itself —
+   * matching ngit's push-time behaviour.
+   */
+  issues?: ResolvedIssueLite[];
   /**
    * Called after at least one Grasp server accepted the git push. Lets the
    * parent keep this panel mounted after the merged status event changes the PR
@@ -185,6 +201,12 @@ function formatGitServerName(cloneUrls: string[]): string {
   return hostname;
 }
 
+/** Toast suffix for issues auto-resolved from commit-message keywords. */
+function formatResolvedIssuesSuffix(count: number): string {
+  if (count === 0) return "";
+  return ` Auto-resolved ${count} issue${count !== 1 ? "s" : ""} from commit keywords.`;
+}
+
 /**
  * Publish an event to Grasp relays only and await at least one acceptance.
  */
@@ -240,6 +262,52 @@ async function fetchPRBranchObjectsWithTimeout(
   }
 }
 
+async function fetchIssueScanObjectsForStateDelta(
+  gitPool: GitGraspPool,
+  currentStateEvent: NostrEvent | null | undefined,
+  defaultBranchName: string,
+  defaultBranchHead: string,
+  fallbackUrls: string[],
+): Promise<PackableObject[]> {
+  const oldStateHead = currentStateEvent
+    ? getStateRefs(currentStateEvent).find(
+        (ref) => ref.name === `refs/heads/${defaultBranchName}`,
+      )?.commitId
+    : undefined;
+  if (!oldStateHead || oldStateHead === defaultBranchHead) return [];
+
+  const abort = new AbortController();
+  const timeout = globalThis.setTimeout(
+    () => abort.abort(),
+    ISSUE_STATE_DELTA_FETCH_TIMEOUT_MS,
+  );
+
+  try {
+    const history = await gitPool.getCommitHistory(
+      defaultBranchHead,
+      ISSUE_STATE_DELTA_MAX_DEPTH,
+      abort.signal,
+      fallbackUrls,
+      oldStateHead,
+    );
+    if (!history?.some((commit) => commit.hash === oldStateHead)) return [];
+
+    return (
+      (await gitPool.getPackableObjectsForCommitRange(
+        defaultBranchHead,
+        oldStateHead,
+        abort.signal,
+        fallbackUrls,
+        ISSUE_STATE_DELTA_MAX_DEPTH,
+      )) ?? []
+    );
+  } catch {
+    return [];
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
 const STEP_LABELS: Record<MergeStep, string> = {
   idle: "",
   building: "Building merge commit...",
@@ -267,6 +335,7 @@ export function MergePanel({
   currentStateEvent,
   guessedBaseCommitId,
   prNevent,
+  issues,
   onSuccessfulPush,
 }: MergePanelProps) {
   const account = useActiveAccount();
@@ -317,6 +386,23 @@ export function MergePanel({
       })),
     [patchChain],
   );
+
+  // Issue auto-resolution context (ngit parity): commit messages landing on
+  // the default branch are scanned for resolution keywords against the repo's
+  // open/draft issues. Resolved/closed/deleted issues are filtered here so
+  // the merge never re-resolves them.
+  const issueAutoResolve = useMemo<IssueAutoResolveContext | undefined>(() => {
+    if (!issues?.length) return undefined;
+    const candidates: IssueCandidate[] = issues
+      .filter((issue) => issue.status === "open" || issue.status === "draft")
+      .map((issue) => ({
+        id: issue.id,
+        pubkey: issue.pubkey,
+        status: issue.status,
+      }));
+    if (candidates.length === 0) return undefined;
+    return { issues: candidates, maintainers: repo.maintainerSet };
+  }, [issues, repo.maintainerSet]);
 
   const patchTipCommitId = useMemo(() => {
     if (isPRType || !patchChain?.length) return undefined;
@@ -496,6 +582,14 @@ export function MergePanel({
             ...repo.allCoordinates,
             ...(pr.pubkey !== accountPubkey ? [`inbox:${pr.pubkey}`] : []),
           ]),
+        publishIssueStatus: (status, issue) =>
+          outboxStore.publish(status, [
+            `outbox:${accountPubkey}`,
+            ...repo.allCoordinates,
+            ...(issue.pubkey !== accountPubkey
+              ? [`inbox:${issue.pubkey}`]
+              : []),
+          ]),
         broadcastStateBroadly: (state) =>
           outboxStore.publish(state, [
             `outbox:${accountPubkey}`,
@@ -603,8 +697,17 @@ export function MergePanel({
       const { transports, getPushSummary } = createMergeTransports(
         account.pubkey,
       );
+      const issueScanObjects = issueAutoResolve
+        ? await fetchIssueScanObjectsForStateDelta(
+            gitPool,
+            currentStateEvent,
+            defaultBranchName,
+            defaultBranchHead,
+            effectiveCloneUrls,
+          )
+        : [];
 
-      const { mergeCommit } = await performMerge({
+      const { mergeCommit, issueStatuses } = await performMerge({
         signer: account.signer,
         signerPubkey: account.pubkey,
         chainObjects: mergeability.buildResult.objects,
@@ -617,6 +720,8 @@ export function MergePanel({
         repoCoords: pr.repoCoords,
         rootEventId: pr.rootEvent.id,
         rootAuthorPubkey: pr.pubkey,
+        issueScanObjects,
+        issueAutoResolve,
         subject: pr.currentSubject || pr.originalSubject,
         prNevent: buildPRNevent(pr.rootEvent.id, pr.pubkey, repo.relays),
         rootAuthorName,
@@ -632,7 +737,7 @@ export function MergePanel({
       const summary = getPushSummary();
       toast({
         title: "Patch merged",
-        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}.${summary ? ` ${summarizePushDelivery(summary)}` : ""}`,
+        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}.${summary ? ` ${summarizePushDelivery(summary)}` : ""}${formatResolvedIssuesSuffix(issueStatuses.length)}`,
       });
     } catch (err) {
       failMerge(err, "Merge failed", "Merge failed unexpectedly");
@@ -644,8 +749,10 @@ export function MergePanel({
     currentStateEvent,
     defaultBranchName,
     gitPool,
+    effectiveCloneUrls,
     pr,
     patchEventIds,
+    issueAutoResolve,
     repo,
     rootAuthorName,
     beginMerge,
@@ -673,8 +780,17 @@ export function MergePanel({
       const { transports, getPushSummary } = createMergeTransports(
         account.pubkey,
       );
+      const issueScanObjects = issueAutoResolve
+        ? await fetchIssueScanObjectsForStateDelta(
+            gitPool,
+            currentStateEvent,
+            defaultBranchName,
+            defaultBranchHead,
+            effectiveCloneUrls,
+          )
+        : [];
 
-      const { newTipCommitHash } = await performApplyToTip({
+      const { newTipCommitHash, issueStatuses } = await performApplyToTip({
         signer: account.signer,
         signerPubkey: account.pubkey,
         objects: mergeability.applyResult.objects,
@@ -686,6 +802,8 @@ export function MergePanel({
         repoCoords: pr.repoCoords,
         rootEventId: pr.rootEvent.id,
         rootAuthorPubkey: pr.pubkey,
+        issueScanObjects,
+        issueAutoResolve,
         patchEventIds,
         ...transports,
       });
@@ -694,7 +812,7 @@ export function MergePanel({
       const patchCount = patchChain?.length ?? 0;
       toast({
         title: "Patch applied",
-        description: `${patchCount} commit${patchCount !== 1 ? "s" : ""} applied to ${defaultBranchName} (tip: ${newTipCommitHash.slice(0, 8)}).${summary ? ` ${summarizePushDelivery(summary)}` : ""}`,
+        description: `${patchCount} commit${patchCount !== 1 ? "s" : ""} applied to ${defaultBranchName} (tip: ${newTipCommitHash.slice(0, 8)}).${summary ? ` ${summarizePushDelivery(summary)}` : ""}${formatResolvedIssuesSuffix(issueStatuses.length)}`,
       });
     } catch (err) {
       failMerge(err, "Apply failed", "Apply failed unexpectedly");
@@ -706,9 +824,11 @@ export function MergePanel({
     currentStateEvent,
     defaultBranchName,
     gitPool,
+    effectiveCloneUrls,
     pr,
     patchChain,
     patchEventIds,
+    issueAutoResolve,
     repo,
     beginMerge,
     createMergeTransports,
@@ -735,8 +855,17 @@ export function MergePanel({
       const { transports, getPushSummary } = createMergeTransports(
         account.pubkey,
       );
+      const issueScanObjects = issueAutoResolve
+        ? await fetchIssueScanObjectsForStateDelta(
+            gitPool,
+            currentStateEvent,
+            defaultBranchName,
+            defaultBranchHead,
+            effectiveCloneUrls,
+          )
+        : [];
 
-      const { mergeCommit } = await performPRMerge({
+      const { mergeCommit, issueStatuses } = await performPRMerge({
         signer: account.signer,
         signerPubkey: account.pubkey,
         mergeCommitObj: prMergeability.result.mergeCommitObj,
@@ -750,6 +879,8 @@ export function MergePanel({
         repoCoords: pr.repoCoords,
         rootEventId: pr.rootEvent.id,
         rootAuthorPubkey: pr.pubkey,
+        issueScanObjects,
+        issueAutoResolve,
         fetchBranchObjects: (tipCommitHash, stopAtCommitHash) =>
           fetchPRBranchObjectsWithTimeout(
             gitPool,
@@ -763,7 +894,7 @@ export function MergePanel({
       const summary = getPushSummary();
       toast({
         title: "PR merged",
-        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}.${summary ? ` ${summarizePushDelivery(summary)}` : ""}`,
+        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}.${summary ? ` ${summarizePushDelivery(summary)}` : ""}${formatResolvedIssuesSuffix(issueStatuses.length)}`,
       });
     } catch (err) {
       failMerge(err, "Merge failed", "Merge failed unexpectedly");
@@ -777,6 +908,7 @@ export function MergePanel({
     gitPool,
     effectiveCloneUrls,
     pr,
+    issueAutoResolve,
     repo,
     beginMerge,
     createMergeTransports,

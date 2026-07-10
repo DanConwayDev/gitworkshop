@@ -53,6 +53,8 @@ export function makePoolTransports(
     },
     publishStatusBroadly: (status) =>
       publishToRelays(status, relays, "status event"),
+    publishIssueStatus: (status) =>
+      publishToRelays(status, relays, "issue status event"),
     broadcastStateBroadly: (state) =>
       publishToRelays(state, relays, "state broadcast"),
     onEvent: (event) => {

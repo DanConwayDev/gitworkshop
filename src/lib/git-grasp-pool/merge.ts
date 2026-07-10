@@ -10,7 +10,9 @@
  *   2. Sign + publish the kind:30618 state to the Grasp relays ONLY
  *      (purgatory authorization).
  *   3. Push the packfile to the Grasp git server(s).
- *   4. Sign + publish the kind:1631 merged status event broadly.
+ *   4. Sign + publish the kind:1631 merged status event broadly, then
+ *      auto-resolve issues referenced by commit-message keywords in the
+ *      landed commits (ngit parity — see `@/lib/issue-auto-resolve`).
  *   5. Broadcast the kind:30618 state event to the remaining relays.
  *
  * If the push (step 3) fails, the state event expires from purgatory after
@@ -47,6 +49,13 @@ import {
   STATUS_KIND_MAP,
 } from "@/factories/StatusChangeFactory";
 import type { CommitPerson } from "@/lib/git-objects";
+import { getStateRefs } from "@/lib/nip34";
+import {
+  collectIssueResolutions,
+  parseCommitsFromPackableObjects,
+  signIssueResolutionStatus,
+  type IssueCandidate,
+} from "@/lib/issue-auto-resolve";
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -76,6 +85,21 @@ export interface PatchEventRef {
   pubkey: string;
 }
 
+/**
+ * Context for auto-resolving issues from commit-message keywords, mirroring
+ * ngit's push-time behaviour (see `@/lib/issue-auto-resolve`). When supplied
+ * (together with the `publishIssueStatus` transport), every commit landing on
+ * the default branch — the PR/patch commits AND the merge commit itself — is
+ * scanned for `closes/fixes/resolves/implements <issue-ref>` keywords and a
+ * kind:1631 resolved status is published for each matching issue.
+ */
+export interface IssueAutoResolveContext {
+  /** The repo's known issues (open/draft ones are eligible). */
+  issues: IssueCandidate[];
+  /** Confirmed repository maintainers (authorisation set). */
+  maintainers: string[];
+}
+
 /** Repo / branch / item context shared by every merge strategy. */
 export interface GraspMergeContext {
   /** Pubkey of the maintainer performing the merge (the signer). */
@@ -96,6 +120,19 @@ export interface GraspMergeContext {
   rootEventId: string;
   /** The PR/patch author pubkey. */
   rootAuthorPubkey: string;
+  /**
+   * Extra commit objects used only by issue auto-resolution. These are not
+   * pushed. They cover the case where the authoritative git server is already
+   * ahead of the previous signed state, so the kind:30618 update being signed
+   * is `oldStateHead..newTip`, not just `defaultBranchHead..newTip`.
+   */
+  issueScanObjects?: PackableObject[];
+  /**
+   * When set, scan the commits landing on the default branch for issue
+   * resolution keywords and publish kind:1631 statuses for matching issues
+   * (requires the `publishIssueStatus` transport).
+   */
+  issueAutoResolve?: IssueAutoResolveContext;
 }
 
 /** Injected side-effecting transports, shared by every merge strategy. */
@@ -115,6 +152,16 @@ export interface GraspMergeTransports {
   ) => Promise<void>;
   /** Broadcast the signed kind:1631 status event to the wider relay set. */
   publishStatusBroadly: (status: NostrEvent) => Promise<void>;
+  /**
+   * Broadcast a signed kind:1631 issue-resolution status (produced by the
+   * `issueAutoResolve` scan). Receives the matched issue so callers can
+   * target the issue author's inbox relays. Required for issue
+   * auto-resolution to run.
+   */
+  publishIssueStatus?: (
+    status: NostrEvent,
+    issue: IssueCandidate,
+  ) => Promise<void>;
   /** Broadcast the signed kind:30618 state event to the remaining relays. */
   broadcastStateBroadly: (state: NostrEvent) => Promise<void>;
   /**
@@ -169,6 +216,37 @@ export function createCommitPersonNow(
   };
 }
 
+/** Return a ref's commit hash from a kind:30618 state event, if declared. */
+function getStateRefCommit(
+  state: NostrEvent | null | undefined,
+  refName: string,
+): string | undefined {
+  if (!state) return undefined;
+  return getStateRefs(state).find((ref) => ref.name === refName)?.commitId;
+}
+
+/** True when `ancestorHash` is reachable from `fromHash` within these commits. */
+function canReachCommitWithin(
+  commits: ReturnType<typeof parseCommitsFromPackableObjects>,
+  fromHash: string,
+  ancestorHash: string,
+): boolean {
+  const byHash = new Map(commits.map((commit) => [commit.hash, commit]));
+  const queue = [fromHash];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const hash = queue.shift()!;
+    if (hash === ancestorHash) return true;
+    if (visited.has(hash)) continue;
+    visited.add(hash);
+    const commit = byHash.get(hash);
+    if (commit) queue.push(...commit.parents);
+  }
+
+  return false;
+}
+
 /**
  * Sign the kind:1631 merged status event for a merged PR/patch. Also used on
  * its own by the "mark detected merge as merged" flow, which publishes the
@@ -217,6 +295,88 @@ interface MergeSequenceResult {
   state: NostrEvent;
   /** The signed kind:1631 status event. */
   status: NostrEvent;
+  /**
+   * Signed kind:1631 statuses for issues auto-resolved from commit-message
+   * keywords (empty when none matched or auto-resolution was not wired up).
+   */
+  issueStatuses: NostrEvent[];
+}
+
+/**
+ * Scan the commits introduced by the kind:30618 default-branch ref update for
+ * issue resolution keywords (ngit parity: revwalk `oldRef..newTip`), then
+ * sign + publish one kind:1631 status per matched issue. This inspection is
+ * scoped to the state event signed in step 2, not to whatever packfile objects
+ * are pushed to bring lagging mirrors up to speed. Catch-up objects fetched by
+ * `CatchUpObjectFetcher` in `grasp-push.ts` are added inside the pushObjects
+ * transport and never enter this scan set — keep it that way. Failures here
+ * never fail the merge — the push has already succeeded — so each issue is
+ * attempted independently.
+ */
+async function publishIssueResolutions(
+  params: GraspMergeContext & GraspMergeTransports,
+  newTipHash: string,
+  objects: PackableObject[],
+  defaultBranchRef: string,
+): Promise<NostrEvent[]> {
+  const { issueAutoResolve, publishIssueStatus } = params;
+  if (!issueAutoResolve || !publishIssueStatus) return [];
+
+  const oldStateHead = getStateRefCommit(
+    params.currentStateEvent,
+    defaultBranchRef,
+  );
+  const commitsToScan = parseCommitsFromPackableObjects([
+    ...objects,
+    ...(params.issueScanObjects ?? []),
+  ]);
+
+  // If the signed state is behind the authoritative git head, the state event
+  // we just signed advances refs/heads/<default> from oldStateHead all the way
+  // to newTipHash. In that case, scan oldStateHead..newTip and include the
+  // git-head commits supplied via issueScanObjects. If oldStateHead is not
+  // reachable from defaultBranchHead within the scan objects, treat the git
+  // server as lagging/diverged and also stop at defaultBranchHead to avoid
+  // re-scanning commits already covered by the previous signed state.
+  const gitHeadIsAheadOfState =
+    !!oldStateHead &&
+    oldStateHead !== params.defaultBranchHead &&
+    canReachCommitWithin(commitsToScan, params.defaultBranchHead, oldStateHead);
+  const stopAtHashes = new Set(
+    [
+      oldStateHead,
+      gitHeadIsAheadOfState ? undefined : params.defaultBranchHead,
+    ].filter(
+      (hash): hash is string => typeof hash === "string" && hash.length > 0,
+    ),
+  );
+
+  const resolutions = collectIssueResolutions({
+    commits: commitsToScan,
+    newTipHash,
+    stopAtHashes,
+    issues: issueAutoResolve.issues,
+    signerPubkey: params.signerPubkey,
+    maintainers: issueAutoResolve.maintainers,
+  });
+
+  const published: NostrEvent[] = [];
+  for (const resolution of resolutions) {
+    try {
+      const status = await signIssueResolutionStatus({
+        signer: params.signer,
+        signerPubkey: params.signerPubkey,
+        repoCoords: params.repoCoords,
+        resolution,
+      });
+      await publishIssueStatus(status, resolution.issue);
+      params.onEvent?.(status);
+      published.push(status);
+    } catch {
+      // Best-effort: a failed issue status must not fail the merge.
+    }
+  }
+  return published;
 }
 
 /**
@@ -274,13 +434,24 @@ async function runMergeSequence(
   await params.publishStatusBroadly(status);
   params.onEvent?.(status);
 
+  // Issue auto-resolution from commit keywords (ngit parity). Runs after the
+  // merged status so the primary status always lands first. The scan is tied
+  // to the kind:30618 default-branch ref update signed above, not the full
+  // pushed object set.
+  const issueStatuses = await publishIssueResolutions(
+    params,
+    newTipHash,
+    objects,
+    defaultBranchRef,
+  );
+
   // ── Step 5: Broadcast state to remaining relays ─────────────────────────
   params.onStep?.("broadcasting-state");
   await params.broadcastStateBroadly(state);
 
   params.onStep?.("done");
 
-  return { state, status };
+  return { state, status, issueStatuses };
 }
 
 // ---------------------------------------------------------------------------
@@ -359,14 +530,14 @@ export async function performMerge(
 
   const allObjects: PackableObject[] = [...params.chainObjects, mergeCommit];
 
-  const { state, status } = await runMergeSequence(
+  const { state, status, issueStatuses } = await runMergeSequence(
     params,
     mergeCommit.hash,
     allObjects,
     params.patchEventIds ?? [],
   );
 
-  return { mergeCommit, state, status };
+  return { mergeCommit, state, status, issueStatuses };
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +602,7 @@ export async function performPRMerge(
     ...params.extraObjects,
   ];
 
-  const { state, status } = await runMergeSequence(
+  const { state, status, issueStatuses } = await runMergeSequence(
     params,
     params.mergeCommitObj.hash,
     allObjects,
@@ -441,6 +612,7 @@ export async function performPRMerge(
     mergeCommit: params.mergeCommitObj,
     state,
     status,
+    issueStatuses,
     pushedObjects: allObjects,
   };
 }
@@ -479,12 +651,17 @@ export async function performApplyToTip(
 ): Promise<PerformApplyToTipResult> {
   params.onStep?.("building");
 
-  const { state, status } = await runMergeSequence(
+  const { state, status, issueStatuses } = await runMergeSequence(
     params,
     params.newTipCommitHash,
     params.objects,
     params.patchEventIds ?? [],
   );
 
-  return { state, status, newTipCommitHash: params.newTipCommitHash };
+  return {
+    state,
+    status,
+    issueStatuses,
+    newTipCommitHash: params.newTipCommitHash,
+  };
 }
