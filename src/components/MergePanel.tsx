@@ -356,9 +356,14 @@ export function MergePanel({
     null,
   );
 
-  const supportsBrowserMerge = repo.graspCloneUrls.length > 0;
+  const hasAdditionalGitServers = repo.additionalGitServerUrls.length > 0;
+  const supportsBrowserMerge =
+    repo.graspCloneUrls.length > 0 && !hasAdditionalGitServers;
   const localMergeCommand = `ngit merge ${pr.rootEvent.id.slice(0, 8)} && git push`;
   const gitServerName = formatGitServerName(repo.additionalGitServerUrls);
+  const localMergeReason = hasAdditionalGitServers
+    ? `This repository also lists ${gitServerName} as a git server, so gitworkshop can't safely update every advertised server.`
+    : `This repository uses ${gitServerName}, so merging directly from gitworkshop isn't supported.`;
 
   // Committer identity for browser-created commits. The memoised value feeds
   // the mergeability hooks (which pre-build objects); the builder is called
@@ -1294,9 +1299,7 @@ export function MergePanel({
             {canShowLocalMerge && (
               <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-sm">
                 <p className="text-muted-foreground">
-                  This repository uses {gitServerName}, so merging directly from
-                  gitworkshop isn't supported. To merge, run this from your
-                  local repo:
+                  {localMergeReason} To merge, run this from your local repo:
                 </p>
                 <button
                   type="button"
