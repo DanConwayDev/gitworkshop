@@ -52,6 +52,31 @@ pnpm add <package>
 npm install --package-lock-only
 ```
 
+## Android
+
+GitWorkshop has a Capacitor-backed Android APK build. `pnpm android:build`
+creates a debug APK at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+For signed releases, create and store the upload key securely **outside this
+repository** (for example, in encrypted offline or organisation-managed secret
+storage). Losing the signing key prevents publishing future updates to the same
+Android application ID. Create `android/signing.properties` locally (it is
+ignored) with:
+
+```properties
+storeFile=/secure/path/to/gitworkshop-upload.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
+```
+
+`pnpm android:build:release` creates the Play-ready signed bundle at
+`android/app/build/outputs/bundle/release/app-release.aab`; `pnpm
+android:build:release:apk` creates the signed APK at
+`android/app/build/outputs/apk/release/app-release.apk`. Both commands fail
+before building if the local signing configuration is missing or incomplete and
+never fall back to the debug key.
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). No GitHub PRs — contributions go over Nostr only.

@@ -10,6 +10,8 @@
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
     "android:build": "npm run android:sync && (cd android && ./gradlew assembleDebug)",
+    "android:build:release": "pnpm android:sync && (cd android && ./gradlew bundleRelease)",
+    "android:build:release:apk": "pnpm android:sync && (cd android && ./gradlew assembleRelease)",
     "test": "tsc --noEmit && eslint && prettier --check --log-level warn . && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
     "pre-commit": "tsc --noEmit && eslint && prettier --write --log-level warn . && git update-index --again && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Pre-commit OK'",
     "format": "prettier -w .",

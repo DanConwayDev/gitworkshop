@@ -1,14 +1,26 @@
 apply plugin: 'com.android.application'
 
+def releaseSigningPropertiesFile = rootProject.file('signing.properties')
+def releaseSigningProperties = new Properties()
+if (releaseSigningPropertiesFile.exists()) {
+    releaseSigningPropertiesFile.withInputStream { releaseSigningProperties.load(it) }
+}
+
+def requiredReleaseSigningProperties = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword']
+def missingReleaseSigningProperties = requiredReleaseSigningProperties.findAll {
+    !releaseSigningProperties.getProperty(it)?.trim()
+}
+
 android {
-    namespace = "dev.gitworkshop.app"
+    namespace = "dev.gitworkshop"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "dev.gitworkshop.app"
+        applicationId "dev.gitworkshop"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // versionCode = major * 1_000_000 + minor * 1_000 + patch
+        versionCode 3000000
+        versionName "3.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,11 +28,36 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (missingReleaseSigningProperties.empty) {
+                storeFile rootProject.file(releaseSigningProperties.getProperty('storeFile'))
+                storePassword releaseSigningProperties.getProperty('storePassword')
+                keyAlias releaseSigningProperties.getProperty('keyAlias')
+                keyPassword releaseSigningProperties.getProperty('keyPassword')
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def buildsRelease = taskGraph.allTasks.any { it.name.toLowerCase().contains('release') }
+    if (buildsRelease && !missingReleaseSigningProperties.empty) {
+        def source = releaseSigningPropertiesFile.exists()
+            ? "missing fields: ${missingReleaseSigningProperties.join(', ')}"
+            : "file not found"
+        throw new GradleException(
+            "Release signing configuration is required (${source}). " +
+            "Create android/signing.properties with storeFile, storePassword, keyAlias, and keyPassword. " +
+            "Release builds never use the debug key.",
+        )
     }
 }
 

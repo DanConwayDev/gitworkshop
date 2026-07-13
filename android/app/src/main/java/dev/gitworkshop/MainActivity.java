@@ -1,4 +1,4 @@
-package dev.gitworkshop.app;
+package dev.gitworkshop;
 
 import com.getcapacitor.BridgeActivity;
 
