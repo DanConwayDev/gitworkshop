@@ -406,7 +406,7 @@ Multi-maintainer repositories are announced under one kind:30617 coordinate per 
 
 PR-triggered workflows additionally carry NIP-22-style trigger tags — uppercase `E`/`K`/`P` for the root PR (kind:1618) and lowercase `e`/`k`/`p` for the concrete trigger (the PR itself, or a kind:1619 PR Update). Push-triggered workflows carry `["r", "refs/heads/<branch>"]` instead.
 
-Job Result-specific tags on kind:9841 include `job`, `conclusion`, `logs`, and optionally `name`, `artifact`, `queued_at`, `started_at`, `exit_code`, and `runs_on`. Workflow Results (kind:9842) carry a combined `conclusion` plus a `q` tag for each Job Result. Workflow Progress (kind:39842) adds an addressable `d` tag, `status` (`queued`, `in_progress`, or `concluded`), optional `queue` and `in-progress` tags, and a NIP-40 `expiration` tag.
+Job Result-specific tags on kind:9841 include `job`, `conclusion`, `logs`, and optionally `name`, `artifact`, `queued_at`, `started_at`, `exit_code`, and `runs_on`. Workflow Results (kind:9842) carry a combined `conclusion` plus a `q` tag for each Job Result. Workflow Progress (kind:39842) adds an addressable `d` tag, `status` (`queued`, `in_progress`, or `concluded`), optional `queued_at`, `started_at`, `queue`, and `in-progress` tags, and a NIP-40 `expiration` tag. Since progress markers are replaceable and renewed before expiry, gitworkshop uses `queued_at` and `started_at` rather than `created_at` when displaying the time a queued or executing workflow entered that state. The `queue` value is displayed as an estimated number of coordinator capacity rounds ahead, not an exact job position.
 
 ### Fetching strategy
 

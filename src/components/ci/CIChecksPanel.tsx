@@ -37,6 +37,7 @@ import {
   type CIJobResult,
   type CIWorkflowRun,
 } from "@/lib/ci";
+import type { CIRun } from "@/casts/CIRun";
 import type { PRCIChecks } from "@/hooks/useCI";
 
 interface CIChecksPanelProps {
@@ -58,6 +59,20 @@ function parseLogTail(content: string): {
     log: content.slice(match[0].length),
     omittedBytes: Number.isFinite(omittedBytes) ? omittedBytes : undefined,
   };
+}
+
+function formatPendingRunStatus(run: CIRun): string {
+  if (run.progressStatus === "queued") {
+    const queuedAt = run.queuedAt ?? run.event.created_at;
+    const queuePosition =
+      run.queueRounds === undefined
+        ? ""
+        : ` · ${run.queueRounds} capacity ${run.queueRounds === 1 ? "round" : "rounds"} ahead`;
+    return `queued ${formatDistanceToNow(new Date(queuedAt * 1000), { addSuffix: true })}${queuePosition}`;
+  }
+
+  const startedAt = run.startedAt ?? run.queuedAt ?? run.event.created_at;
+  return `started ${formatDistanceToNow(new Date(startedAt * 1000), { addSuffix: true })}`;
 }
 
 export function CIChecksPanel({ checks, className }: CIChecksPanelProps) {
@@ -138,6 +153,9 @@ export function CIRunRow({
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
+  const pendingStatus = run.pendingRun
+    ? formatPendingRunStatus(run.pendingRun)
+    : undefined;
   const relativeTime = formatDistanceToNow(new Date(run.createdAt * 1000), {
     addSuffix: true,
   });
@@ -160,7 +178,7 @@ export function CIRunRow({
             </span>
             <span className="hidden sm:inline shrink-0 text-xs text-muted-foreground">
               {run.status === "pending"
-                ? `started ${relativeTime}`
+                ? pendingStatus
                 : `${ciStatusLabel(run.status).toLowerCase()} ${relativeTime}`}
             </span>
           </CollapsibleTrigger>
@@ -193,11 +211,7 @@ export function CIRunRow({
             {run.pendingRun && (
               <div className="flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
                 <CIStatusIcon status="pending" className="h-3.5 w-3.5" />
-                Workflow started{" "}
-                {formatDistanceToNow(
-                  new Date(run.pendingRun.event.created_at * 1000),
-                  { addSuffix: true },
-                )}
+                Workflow {formatPendingRunStatus(run.pendingRun)}
                 <EventCardActions event={run.pendingRun.event} />
               </div>
             )}

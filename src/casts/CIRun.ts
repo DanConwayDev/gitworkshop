@@ -16,6 +16,8 @@ const ExpirationSymbol = Symbol.for("ci-run-expiration");
 const RunIdSymbol = Symbol.for("ci-run-id");
 const ProgressStatusSymbol = Symbol.for("ci-run-status");
 const QueueRoundsSymbol = Symbol.for("ci-run-queue-rounds");
+const QueuedAtSymbol = Symbol.for("ci-run-queued-at");
+const StartedAtSymbol = Symbol.for("ci-run-started-at");
 const InProgressJobsSymbol = Symbol.for("ci-run-in-progress-jobs");
 const ConclusionSymbol = Symbol.for("ci-run-conclusion");
 
@@ -77,6 +79,26 @@ export class CIRun extends CIContextCast<CIRunEvent> {
   get queueRounds(): number | undefined {
     return getOrComputeCachedValue(this.event, QueueRoundsSymbol, () => {
       const raw = getTagValue(this.event, "queue");
+      if (raw === undefined) return undefined;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) ? n : undefined;
+    });
+  }
+
+  /** Timestamp at which this workflow entered the coordinator queue. */
+  get queuedAt(): number | undefined {
+    return getOrComputeCachedValue(this.event, QueuedAtSymbol, () => {
+      const raw = getTagValue(this.event, "queued_at");
+      if (raw === undefined) return undefined;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) ? n : undefined;
+    });
+  }
+
+  /** Timestamp at which this workflow began execution. */
+  get startedAt(): number | undefined {
+    return getOrComputeCachedValue(this.event, StartedAtSymbol, () => {
+      const raw = getTagValue(this.event, "started_at");
       if (raw === undefined) return undefined;
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) ? n : undefined;
