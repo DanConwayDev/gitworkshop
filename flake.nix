@@ -34,14 +34,17 @@
           });
         android-sdk = pkgs.androidenv.composeAndroidPackages {
           platformVersions = [ "36" ];
-          buildToolsVersions = [ "36.0.0" ];
+          # Android Gradle Plugin 8.13 defaults to Build Tools 35.0.0. Include
+          # that version explicitly because the Nix SDK is immutable and Gradle
+          # cannot install its default version at build time.
+          buildToolsVersions = [ "35.0.0" "36.0.0" ];
         };
       in {
         devShell = pkgs.mkShell {
           buildInputs = [
             pkgs.nodejs
             pkgs.pnpm
-            pkgs.jdk17
+            pkgs.jdk21
             android-sdk.androidsdk
             ngit-grasp-pkg
           ];
@@ -51,9 +54,12 @@
           # dev but not reproducible in CI.
           shellHook = ''
             export NGIT_GRASP_BIN=${ngit-grasp-pkg}/bin/ngit-grasp
-            export JAVA_HOME=${pkgs.jdk17}
+            export JAVA_HOME=${pkgs.jdk21}
             export ANDROID_HOME=${android-sdk.androidsdk}/libexec/android-sdk
             export ANDROID_SDK_ROOT="$ANDROID_HOME"
+            # AGP normally downloads aapt2 from Maven, but that binary is not
+            # runnable on NixOS. Use the aapt2 packaged in the Nix SDK instead.
+            export GRADLE_OPTS="''${GRADLE_OPTS:+$GRADLE_OPTS }-Dorg.gradle.project.android.aapt2FromMavenOverride=$ANDROID_HOME/build-tools/35.0.0/aapt2"
 
             if git rev-parse --git-dir >/dev/null 2>&1; then
               hooks_dir="$(git rev-parse --git-dir)/hooks"
