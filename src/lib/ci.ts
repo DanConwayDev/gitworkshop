@@ -373,7 +373,7 @@ export function ciStatusLabel(status: CICheckStatus): string {
     case "success":
       return "Successful";
     case "failure":
-      return "Failing";
+      return "Failed";
     case "neutral":
       return "Neutral";
     case "cancelled":
@@ -404,7 +404,7 @@ export function formatCIDuration(seconds: number | undefined): string | null {
 }
 
 /**
- * Short summary line for a set of runs, e.g. "2 successful, 1 failing".
+ * Short summary line for a set of runs, e.g. "2 successful, 1 failed".
  */
 export function summarizeRuns(runs: CIWorkflowRun[]): string {
   const counts = new Map<CICheckStatus, number>();
