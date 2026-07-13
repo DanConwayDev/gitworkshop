@@ -11,7 +11,9 @@ require a local, ignored `android/signing.properties`; use
 All platform releases share an application version. Before building a release,
 update the root `version.properties`; `APP_VERSION` is the source of the Android
 `versionName`. Gradle derives a monotonically increasing `versionCode` as
-`major * 1_000_000 + minor * 1_000 + patch`.
+`major * 100_000_000 + minor * 100_000 + patch * 100 + stage`. Final releases
+use stage 99; release candidates use `-rc.1` through `-rc.98`, so an RC can be
+installed and then upgraded to its final release.
 
 Push a `v<version>` tag matching `APP_VERSION` (for example, `v3.0.0`) to run
 the signed AAB and APK workflow. It uploads both

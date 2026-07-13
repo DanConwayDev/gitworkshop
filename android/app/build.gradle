@@ -14,13 +14,18 @@ if (!versionPropertiesFile.exists()) {
 versionPropertiesFile.withInputStream { versionProperties.load(it) }
 
 def appVersionName = versionProperties.getProperty('APP_VERSION')?.trim()
-def versionMatcher = appVersionName ? (appVersionName =~ /^(\d+)\.(\d+)\.(\d+)$/) : null
+def versionMatcher = appVersionName ? (appVersionName =~ /^(\d+)\.(\d+)\.(\d+)(?:-rc\.([1-9]\d?))?$/) : null
 if (!versionMatcher || !versionMatcher.matches()) {
-    throw new GradleException("APP_VERSION must use major.minor.patch format in ${versionPropertiesFile}")
+    throw new GradleException("APP_VERSION must use major.minor.patch or major.minor.patch-rc.N format in ${versionPropertiesFile}")
 }
-// versionCode = major * 1_000_000 + minor * 1_000 + patch
-def appVersionCode = versionMatcher[0][1].toInteger() * 1_000_000 +
-    versionMatcher[0][2].toInteger() * 1_000 + versionMatcher[0][3].toInteger()
+// versionCode = major * 100_000_000 + minor * 100_000 + patch * 100 + stage.
+// Release candidates use stages 1–98; the final release uses 99.
+def releaseStage = versionMatcher[0][4] ? versionMatcher[0][4].toInteger() : 99
+def appVersionCode = versionMatcher[0][1].toInteger() * 100_000_000 +
+    versionMatcher[0][2].toInteger() * 100_000 + versionMatcher[0][3].toInteger() * 100 + releaseStage
+if (appVersionCode > 2_100_000_000) {
+    throw new GradleException("APP_VERSION produces an Android versionCode above 2100000000")
+}
 
 def requiredReleaseSigningProperties = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword']
 def missingReleaseSigningProperties = requiredReleaseSigningProperties.findAll {
