@@ -5,6 +5,10 @@ on:
   pull_request:
 
 jobs:
+  # `test:full` is the convenient local, sequential command for these checks.
+  # CI runs its parts separately instead: the Nix job has the web and e2e
+  # dependencies available, while Android lint needs its own JDK/SDK setup.
+  # Keeping them as jobs also lets the slower Android check run in parallel.
   test:
     runs-on: ubuntu-latest
     steps:
