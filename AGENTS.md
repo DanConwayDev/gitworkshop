@@ -59,6 +59,14 @@ shadcn/ui primitives live in `@/components/ui`. List the directory (`ls src/comp
 - **Use `pnpm` when available and working.** npm is supported as a fallback (`npm ci`, `npm run dev`, `npm run pre-commit`). Nix is optional; `nix develop` only provides a pinned Node/pnpm/e2e-test toolchain. For dependency updates, use pnpm first so `pnpm-lock.yaml` remains the source of truth, then refresh and commit `package-lock.json` for npm fresh clones (for example, `npm install --package-lock-only`).
 - **Prefer patching upstream over working around bugs.** When a dependency has a bug or missing feature, use the package manager's patch workflow and commit the resulting patch files/configuration rather than wrapping or duplicating logic in our codebase.
 
+## Android
+
+Android builds and the branding-regeneration script are documented in `docs/andriod.md`.
+
+## Changelog
+
+Update `CHANGELOG.md` for significant changes only; keep its `Unreleased` section current and NEVER remove it during release so it remains as a placeholder.
+
 ## Pre-commit and Test Scripts
 
 The git pre-commit hook runs `pnpm pre-commit` (or `npm run pre-commit` when pnpm is unavailable or the local pnpm shim is broken), which runs `tsc --noEmit`, `eslint`, `prettier --write .` (auto-formats and re-stages), `vitest run`, and `vite build`. `pnpm test` / `npm test` is the same pipeline but with `prettier --check` (CI-style, no writes).
