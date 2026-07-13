@@ -6,17 +6,17 @@ if (releaseSigningPropertiesFile.exists()) {
     releaseSigningPropertiesFile.withInputStream { releaseSigningProperties.load(it) }
 }
 
-def versionPropertiesFile = rootProject.file('version.properties')
+def versionPropertiesFile = rootProject.file('../version.properties')
 def versionProperties = new Properties()
 if (!versionPropertiesFile.exists()) {
     throw new GradleException("Android version configuration is required: ${versionPropertiesFile}")
 }
 versionPropertiesFile.withInputStream { versionProperties.load(it) }
 
-def appVersionName = versionProperties.getProperty('VERSION_NAME')?.trim()
+def appVersionName = versionProperties.getProperty('APP_VERSION')?.trim()
 def versionMatcher = appVersionName ? (appVersionName =~ /^(\d+)\.(\d+)\.(\d+)$/) : null
 if (!versionMatcher || !versionMatcher.matches()) {
-    throw new GradleException("VERSION_NAME must use major.minor.patch format in ${versionPropertiesFile}")
+    throw new GradleException("APP_VERSION must use major.minor.patch format in ${versionPropertiesFile}")
 }
 // versionCode = major * 1_000_000 + minor * 1_000 + patch
 def appVersionCode = versionMatcher[0][1].toInteger() * 1_000_000 +

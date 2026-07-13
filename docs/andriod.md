@@ -8,17 +8,16 @@ require a local, ignored `android/signing.properties`; use
 
 ## Releases
 
-Android releases have their own version cycle, independent from more frequent
-web deployments. Before building an Android release, update
-`android/version.properties`. It is the source of the Android `versionName`;
-Gradle derives a monotonically increasing `versionCode` as
+All platform releases share an application version. Before building a release,
+update the root `version.properties`; `APP_VERSION` is the source of the Android
+`versionName`. Gradle derives a monotonically increasing `versionCode` as
 `major * 1_000_000 + minor * 1_000 + patch`.
 
-Push an `android-v<version>` tag matching `VERSION_NAME` (for example,
-`android-v3.0.0`) to run the signed AAB and APK workflow. It uploads both
+Push a `v<version>` tag matching `APP_VERSION` (for example, `v3.0.0`) to run
+the signed AAB and APK workflow. It uploads both
 artifacts but deliberately does not publish to Zapstore yet; validate signed APK
 builds before enabling that publication. The Android bundle embeds that version
-in the web footer alongside its date and commit hash. Ordinary web builds instead
+in the footer alongside its date and commit hash. Ordinary web builds instead
 identify themselves as `Web` plus their date and commit hash.
 
 Android App Links require the release signing certificate fingerprint in

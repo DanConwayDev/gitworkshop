@@ -3,7 +3,7 @@ name: Android release
 on:
   push:
     tags:
-      - "android-v*"
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -58,21 +58,21 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Read Android version
+      - name: Read app version
         id: version
         run: |
           set -eu
-          . ./android/version.properties
-          printf 'name=%s\n' "$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          . ./version.properties
+          printf 'name=%s\n' "$APP_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Verify Android release tag
+      - name: Verify release tag
         if: github.ref_type == 'tag'
         run: |
           set -eu
-          . ./android/version.properties
-          expected_tag="android-v$VERSION_NAME"
+          . ./version.properties
+          expected_tag="v$APP_VERSION"
           if [ "$GITHUB_REF_NAME" != "$expected_tag" ]; then
-            printf 'Android release tag must be %s, got %s\n' "$expected_tag" "$GITHUB_REF_NAME" >&2
+            printf 'Release tag must be %s, got %s\n' "$expected_tag" "$GITHUB_REF_NAME" >&2
             exit 1
           fi
 
