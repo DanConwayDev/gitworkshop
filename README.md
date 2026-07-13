@@ -77,6 +77,44 @@ android:build:release:apk` creates the signed APK at
 before building if the local signing configuration is missing or incomplete and
 never fall back to the debug key.
 
+### Android App Links
+
+The Android manifest verifies HTTPS App Links for both `gitworkshop.dev` and
+`www.gitworkshop.dev`, including every React Router path. Before a release, the
+placeholder in `public/.well-known/assetlinks.json` **must** be replaced with
+the SHA-256 certificate fingerprint of the permanent release signing key (the
+key configured in `android/signing.properties`):
+
+```sh
+keytool -list -v -keystore /secure/path/to/gitworkshop-upload.jks -alias <keyAlias>
+```
+
+Copy the `SHA256:` value exactly (including colon separators) into the sole
+`sha256_cert_fingerprints` entry, then deploy the generated file at
+`https://gitworkshop.dev/.well-known/assetlinks.json` and
+`https://www.gitworkshop.dev/.well-known/assetlinks.json` with no redirects.
+If a store re-signs the distributed app, use that store's app-signing
+certificate fingerprint instead of the upload-key fingerprint.
+
+Build the debug APK reproducibly on NixOS with:
+
+```sh
+nix develop --command pnpm android:build
+```
+
+With a device connected and the APK installed, verify association and route
+handling with:
+
+```sh
+adb shell pm get-app-links dev.gitworkshop
+adb shell am start -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d 'https://gitworkshop.dev/search?q=app-link#results'
+adb shell am start -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d 'https://www.gitworkshop.dev/ngit?source=adb#install'
+```
+
+The package should report verified hosts after Android has fetched the deployed
+asset links file. The activity should open directly to the supplied path while
+retaining its query and fragment.
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). No GitHub PRs — contributions go over Nostr only.
