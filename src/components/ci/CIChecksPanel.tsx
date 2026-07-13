@@ -25,6 +25,7 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  FileText,
   Loader2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -282,14 +283,26 @@ function CIJobRow({ job }: { job: CIJobResult }) {
         <EventCardActions event={result.event} />
       </div>
       {result.artifacts.length > 0 && (
-        <div className="space-y-1 border-t border-border/60 px-3 py-2 text-xs">
-          {result.artifacts.map((artifact, index) => (
-            <CIArtifactRow
-              key={`${artifact.url}-${artifact.filename ?? index}`}
-              url={artifact.url}
-              name={artifact.filename}
-            />
-          ))}
+        <div className="border-t border-border/60 px-3 py-2">
+          <table className="w-full table-fixed text-left text-xs">
+            <thead className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="w-[42%] pb-1 font-medium">Artifact</th>
+                <th className="w-[28%] pb-1 font-medium">Name</th>
+                <th className="w-[30%] pb-1 font-medium">SHA-256</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.artifacts.map((artifact, index) => (
+                <CIArtifactRow
+                  key={`${artifact.url}-${artifact.filename ?? index}`}
+                  url={artifact.url}
+                  filename={artifact.filename}
+                  jobName={result.name}
+                />
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
       {hasLog && showLog && (
@@ -311,10 +324,12 @@ function getBlossomHash(url: string): string | undefined {
 
 function CIArtifactRow({
   url,
-  name,
+  filename,
+  jobName,
 }: {
   url: string;
-  name: string | undefined;
+  filename: string | undefined;
+  jobName: string | undefined;
 }) {
   const [copied, setCopied] = useState(false);
   const hash = getBlossomHash(url);
@@ -332,34 +347,46 @@ function CIArtifactRow({
   }, [hash]);
 
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <span className="shrink-0 text-muted-foreground">Artifact</span>
-      <a
-        href={url}
-        target="_blank"
-        rel="noreferrer"
-        className="min-w-0 truncate font-mono text-foreground underline-offset-2 hover:underline"
-        title={name ?? url}
-      >
-        {name ?? "Download artifact"}
-      </a>
-      {hash && (
-        <button
-          type="button"
-          onClick={copyHash}
-          className="group ml-auto flex shrink-0 items-center gap-1 rounded px-1 py-0.5 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          title={copied ? "Copied!" : "Copy artifact hash"}
-          aria-label={copied ? "Artifact hash copied" : "Copy artifact hash"}
+    <tr className="border-t border-border/40 align-middle first:border-t-0">
+      <td className="min-w-0 py-1.5 pr-2">
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-pink-600 underline-offset-2 hover:text-pink-700 hover:underline dark:text-pink-400 dark:hover:text-pink-300"
+          title={`Download ${filename ?? "artifact"}`}
         >
-          <span>{hash.slice(0, 12)}</span>
-          {copied ? (
-            <Check className="h-3 w-3 text-green-500" />
-          ) : (
-            <Copy className="h-3 w-3 opacity-50 group-hover:opacity-100" />
-          )}
-        </button>
-      )}
-    </div>
+          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate">{filename ?? "Download artifact"}</span>
+        </a>
+      </td>
+      <td
+        className="truncate py-1.5 pr-2 text-muted-foreground"
+        title={jobName}
+      >
+        {jobName ?? "—"}
+      </td>
+      <td className="py-1.5">
+        {hash ? (
+          <button
+            type="button"
+            onClick={copyHash}
+            className="group flex max-w-full items-center gap-1 rounded px-1 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            title={copied ? "Copied!" : `Copy sha256:${hash}`}
+            aria-label={copied ? "Artifact hash copied" : "Copy artifact hash"}
+          >
+            <span className="truncate">sha256:{hash.slice(0, 12)}</span>
+            {copied ? (
+              <Check className="h-3.5 w-3.5 shrink-0 text-green-500" />
+            ) : (
+              <Copy className="h-3.5 w-3.5 shrink-0 text-foreground/70 group-hover:text-foreground" />
+            )}
+          </button>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+    </tr>
   );
 }
 
