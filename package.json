@@ -10,6 +10,7 @@
     "android:sync": "set -a && . ./version.properties && set +a && APP_RELEASE_VERSION=\"$APP_VERSION\" npm run build && cap sync android",
     "android:open": "cap open android",
     "android:build": "npm run android:sync && (cd android && ./gradlew assembleDebug)",
+    "android:lint": "pnpm android:sync && (cd android && ./gradlew lintDebug)",
     "android:build:release": "pnpm android:sync && (cd android && ./gradlew assembleRelease bundleRelease)",
     "android:build:release:apk": "pnpm android:sync && (cd android && ./gradlew assembleRelease)",
     "test": "tsc --noEmit && eslint && prettier --check --log-level warn . && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
@@ -17,6 +18,7 @@
     "format": "prettier -w .",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:e2e:if-available": "if [ -n \"$NGIT_GRASP_BIN\" ] || command -v ngit-grasp >/dev/null 2>&1; then NGIT_GRASP_BIN=\"${NGIT_GRASP_BIN:-$(command -v ngit-grasp)}\" vitest run --config vitest.e2e.config.ts; else echo 'Skipping e2e: ngit-grasp binary not found'; fi",
+    "test:full": "pnpm test && pnpm test:e2e:if-available && pnpm android:lint",
     "pre-push": "npm run test:e2e:if-available"
   },
   "dependencies": {

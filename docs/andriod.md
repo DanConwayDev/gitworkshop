@@ -6,6 +6,11 @@ require a local, ignored `android/signing.properties`; use
 `pnpm android:build:release` for both the AAB and APK, or
 `pnpm android:build:release:apk` for only the APK.
 
+Run `pnpm android:lint` to lint the debug Android variant. `pnpm test:full`
+runs the normal web checks, conditionally runs the GRASP E2E suite when its
+binary is available, then runs Android lint. It is intentionally separate from
+the pre-commit checks and requires a JDK plus Android SDK.
+
 ## Releases
 
 All platform releases share an application version. Before building a release,

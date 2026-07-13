@@ -86,6 +86,7 @@ for density in "${!launcher_sizes[@]}"; do
   port_size=$(awk "BEGIN { print int(120 * $scale) }")
   land_size=$(awk "BEGIN { print int(96 * $scale) }")
   mkdir -p "$resource_dir/drawable-port-$density" "$resource_dir/drawable-land-$density" "$resource_dir/drawable-$density"
+  "${image_magick[@]}" "$regular_source" -resize "${port_size}x${port_size}" "$resource_dir/drawable-$density/splash_mark.png"
   "${image_magick[@]}" "$regular_source" -resize "${port_size}x${port_size}" "$resource_dir/drawable-port-$density/splash_mark.png"
   "${image_magick[@]}" "$regular_source" -resize "${land_size}x${land_size}" "$resource_dir/drawable-land-$density/splash_mark.png"
 done
