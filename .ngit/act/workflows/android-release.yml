@@ -37,13 +37,12 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           set -eu
           : "${ANDROID_KEYSTORE_BASE64:?Set the ANDROID_KEYSTORE_BASE64 secret.}"
           : "${ANDROID_KEYSTORE_PASSWORD:?Set the ANDROID_KEYSTORE_PASSWORD secret.}"
           : "${ANDROID_KEY_ALIAS:?Set the ANDROID_KEY_ALIAS secret.}"
-          : "${ANDROID_KEY_PASSWORD:?Set the ANDROID_KEY_PASSWORD secret.}"
 
           signing_dir="$RUNNER_TEMP/gitworkshop-signing"
           keystore="$signing_dir/gitworkshop-upload.jks"
