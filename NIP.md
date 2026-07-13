@@ -383,24 +383,22 @@ Cover notes reference the root via **lowercase** NIP-10 `#e` (not the uppercase 
 
 ---
 
-## CI Workflow Events (kinds 9841 and 9842) — consumed
+## CI Workflow Events (kinds 9841, 9842, and 39842) — consumed
 
-This project **consumes** (does not define) the experimental CI events published by [`ngit-ci`](https://github.com/DanConwayDev/ngit-ci) for NIP-34 repositories. The authoritative event shapes live in ngit-ci's `NIP.md`; this section documents the subset gitworkshop relies on and how it fetches and interprets them. The kind numbers are temporary while the shape is experimental and deliberately distinct from Hive CI's `5401`/`5402`.
+This project **consumes** (does not define) the experimental CI events published by [`ngit-ci`](https://github.com/DanConwayDev/ngit-ci) for NIP-34 repositories. The authoritative event shapes are defined in [ngit-ci's working Nostr CI NIP](https://gitworkshop.dev/npub15qydau2hjma6ngxkl2cyar74wzyjshvl65za5k5rl69264ar2exs5cyejr/ngit-ci/tree/master/NIP.md), which is implemented but has not yet been merged into the upstream NIPs repository. ngit-ci is working with Hive-CI to achieve consensus around a shared CI standard; this is the working NIP for that effort. This section documents the subset gitworkshop relies on and how it fetches and interprets it.
 
-- **Kind 9841 — CI Workflow Started** (optional): a running indicator for a selected workflow. Carries a NIP-40 `expiration` tag so stale markers self-clear if the runner crashes before publishing a result.
-- **Kind 9842 — CI Workflow Result**: an independent attestation of a workflow/job outcome, signed by the runner/coordinator identity. `content` holds the captured log tail; an optional `log_url` tag points at the full log.
+- **Kind 9841 — Job Result**: an attestation of an individual job outcome, signed by the compute provider that ran it. `content` holds a small log tail; the full log is referenced with a `logs` tag.
+- **Kind 9842 — Workflow Result**: the coordinator-signed combined outcome of a workflow run, with `q` tags that reference its Job Results.
+- **Kind 39842 — Workflow Progress** (optional): an addressable, NIP-40-expiring marker for a queued, in-progress, or recently concluded workflow run.
 
-Both kinds share the common context tags:
+All three kinds share the common context tags:
 
 ```jsonc
 [
   ["a", "30617:<repo-owner-pubkey>:<repo-id>"],
   ["c", "<commit-id>"],
-  ["w", "<workflow-path>"],
-  ["x", "<push|pull_request|manual|schedule>"],
-
-  ["runner", "<runner-name>"], // optional
-  ["platform", "<github-actions|forgejo-actions|gitlab-ci>"], // optional
+  ["w", "<workflow-file-path>", "<sha256-of-workflow-file-content>"],
+  ["o", "<push|pull_request|manual|schedule>"],
 ]
 ```
 
@@ -408,38 +406,38 @@ Multi-maintainer repositories are announced under one kind:30617 coordinate per 
 
 PR-triggered workflows additionally carry NIP-22-style trigger tags — uppercase `E`/`K`/`P` for the root PR (kind:1618) and lowercase `e`/`k`/`p` for the concrete trigger (the PR itself, or a kind:1619 PR Update). Push-triggered workflows carry `["r", "refs/heads/<branch>"]` instead.
 
-Result-specific tags on kind:9842: `job` (job identity, falls back to the workflow path), `status` (`success` | `failure` | `error` | `skipped`), `duration` (seconds), and optionally `exit_code`, `duration_ms`, `log_url`, `stage`.
+Job Result-specific tags on kind:9841 include `job`, `conclusion`, `logs`, and optionally `name`, `artifact`, `queued_at`, `started_at`, `exit_code`, and `runs_on`. Workflow Results (kind:9842) carry a combined `conclusion` plus a `q` tag for each Job Result. Workflow Progress (kind:39842) adds an addressable `d` tag, `status` (`queued`, `in_progress`, or `concluded`), optional `queue` and `in-progress` tags, and a NIP-40 `expiration` tag.
 
 ### Fetching strategy
 
 ```jsonc
-// PR checks — results ride the #E comments fan-out for every repo item
-{ "kinds": [1111, 1619, 9842], "#E": ["<pr-or-patch-event-id>"] }
+// PR checks — CI activity rides the #E comments fan-out for every repo item
+{ "kinds": [1111, 1619, 9841, 9842, 39842], "#E": ["<pr-or-patch-event-id>"] }
 
-// Running markers — fetched repo-wide; NIP-40 expiry keeps the set small
-{ "kinds": [9841], "#a": ["30617:<maintainer-pubkey>:<repo-id>", "..."] }
+// Workflow progress — fetched repo-wide; NIP-40 expiry keeps the set small
+{ "kinds": [39842], "#a": ["30617:<maintainer-pubkey>:<repo-id>", "..."] }
 
 // Commit status ticks — batched per page of displayed commits
 { "kinds": [9842], "#c": ["<commit-id>", "<commit-id>", "..."] }
 
-// Actions tab — all runs repo-wide, fetched on demand
-{ "kinds": [9841, 9842], "#a": ["30617:<maintainer-pubkey>:<repo-id>", "..."] }
+// Actions tab — all CI activity repo-wide, fetched on demand
+{ "kinds": [9841, 9842, 39842], "#a": ["30617:<maintainer-pubkey>:<repo-id>", "..."] }
 
 // Actions tab visibility — one-shot limit-1 presence probe per repo visit
-{ "kinds": [9841, 9842], "#a": ["30617:<maintainer-pubkey>:<repo-id>", "..."], "limit": 1 }
+{ "kinds": [9841, 9842, 39842], "#a": ["30617:<maintainer-pubkey>:<repo-id>", "..."], "limit": 1 }
 ```
 
-- **PR / patch pages and lists**: kind:9842 is fetched alongside NIP-22 comments via the `#E` root-tag loader, so PR list rows and detail pages get results with no extra subscriptions. The no-kind thread loader on detail pages also picks up both kinds.
-- **Kind:9841** is fetched once per repo via the `#a` coordinate filter in the repo meta subscription — because markers expire (NIP-40), the live set stays small. Expired markers are dropped at display time and re-checked periodically so pending spinners clear without a new event.
+- **PR / patch pages and lists**: kinds:9841, 9842, and 39842 are fetched alongside NIP-22 comments via the `#E` root-tag loader, so PR list rows and detail pages get CI activity with no extra subscriptions. The no-kind thread loader on detail pages also picks up all three kinds.
+- **Kind:39842** is fetched once per repo via the `#a` coordinate filter in the repo meta subscription — because markers expire (NIP-40), the live set stays small. Expired markers are dropped at display time and re-checked periodically so pending spinners clear without a new event.
 - **Commit ticks** (CodeBar head commit, commit history rows, commit detail page) fetch kind:9842 by `#c` for exactly the commits being displayed; a singleton batched loader collapses a page of commits into one REQ per relay.
-- **Actions tab**: a repo-wide live `#a` subscription for both kinds runs only while the tab is open (kind:9842 events carry log tails and can be large, so this is not fetched eagerly). Tab visibility is decided by a cheap one-shot limit-1 probe fired from the repo layout, combined with any CI events already in the store from the other loaders.
+- **Actions tab**: a repo-wide live `#a` subscription for all three kinds runs only while the tab is open (kind:9841 events carry log tails and can be large, so this is not fetched eagerly). Tab visibility is decided by a cheap one-shot limit-1 probe fired from the repo layout, combined with any CI events already in the store from the other loaders.
 
 ### Interpretation rules
 
-- Events are grouped into **workflow runs** by `(runner pubkey, commit, workflow path)`; within a run only the **latest kind:9842 per `job`** counts.
-- An unexpired kind:9841 marker counts as **pending** only when it is newer than every result in its group (a marker newer than existing results indicates a re-run).
-- Roll-up precedence across jobs/runs: `error` > `failure` > `pending` > `success` > `skipped`. Unknown `status` values are treated as `error`.
-- Clients MUST NOT require a kind:9842 to be preceded by a kind:9841 — results are independent attestations.
+- Events are grouped into **workflow runs** by `(coordinator pubkey, commit, workflow path)`; a kind:9842 Workflow Result links the Job Results that make up that run through its `q` tags.
+- An unexpired kind:39842 Workflow Progress marker counts as **pending** while its `status` is `queued` or `in_progress`; a newer marker for the same `d` tag replaces the earlier state.
+- Roll-up uses the workflow's `conclusion`, with job-level `conclusion` values available from the referenced kind:9841 events. Clients MUST tolerate the NIP's standard conclusion values: `success`, `failure`, `neutral`, `cancelled`, `skipped`, `timed_out`, and `startup_failure`.
+- Clients MUST NOT require a kind:39842 progress marker to accept a kind:9842 Workflow Result — publishing progress is optional.
 
 ### Trust model
 
