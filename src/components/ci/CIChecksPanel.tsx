@@ -19,7 +19,14 @@ import {
   type ReactNode,
 } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { AlertCircle, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  ChevronRight,
+  Copy,
+  ExternalLink,
+  Loader2,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Collapsible,
@@ -274,8 +281,83 @@ function CIJobRow({ job }: { job: CIJobResult }) {
         )}
         <EventCardActions event={result.event} />
       </div>
+      {result.artifacts.length > 0 && (
+        <div className="space-y-1 border-t border-border/60 px-3 py-2 text-xs">
+          {result.artifacts.map((artifact, index) => (
+            <CIArtifactRow
+              key={`${artifact.url}-${artifact.filename ?? index}`}
+              url={artifact.url}
+              name={artifact.filename}
+            />
+          ))}
+        </div>
+      )}
       {hasLog && showLog && (
         <CILogViewer log={result.log} logUrl={result.logUrl} />
+      )}
+    </div>
+  );
+}
+
+const BLOSSOM_HASH_PATH_RE = /^\/([a-f0-9]{64})\b/i;
+
+function getBlossomHash(url: string): string | undefined {
+  try {
+    return BLOSSOM_HASH_PATH_RE.exec(new URL(url).pathname)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function CIArtifactRow({
+  url,
+  name,
+}: {
+  url: string;
+  name: string | undefined;
+}) {
+  const [copied, setCopied] = useState(false);
+  const hash = getBlossomHash(url);
+
+  const copyHash = useCallback(async () => {
+    if (!hash) return;
+
+    try {
+      await navigator.clipboard.writeText(hash);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be unavailable in insecure browser contexts.
+    }
+  }, [hash]);
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="shrink-0 text-muted-foreground">Artifact</span>
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="min-w-0 truncate font-mono text-foreground underline-offset-2 hover:underline"
+        title={name ?? url}
+      >
+        {name ?? "Download artifact"}
+      </a>
+      {hash && (
+        <button
+          type="button"
+          onClick={copyHash}
+          className="group ml-auto flex shrink-0 items-center gap-1 rounded px-1 py-0.5 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          title={copied ? "Copied!" : "Copy artifact hash"}
+          aria-label={copied ? "Artifact hash copied" : "Copy artifact hash"}
+        >
+          <span>{hash.slice(0, 12)}</span>
+          {copied ? (
+            <Check className="h-3 w-3 text-green-500" />
+          ) : (
+            <Copy className="h-3 w-3 opacity-50 group-hover:opacity-100" />
+          )}
+        </button>
       )}
     </div>
   );
