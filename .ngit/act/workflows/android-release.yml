@@ -69,10 +69,23 @@ jobs:
             exit 1
           fi
 
+      # Build both distributable formats in one Gradle invocation. Keep Zapstore
+      # publishing out of this workflow until the signed artifacts are verified.
       - run: pnpm android:build:release
+
+      # The AAB and APK have been signed at this point, so neither the keystore
+      # nor the generated file containing its passwords is needed any longer.
+      # Run even when the build fails after signing configuration is created.
+      - name: Remove release signing material
+        if: ${{ always() }}
+        run: |
+          rm -f android/signing.properties
+          rm -rf "$RUNNER_TEMP/gitworkshop-signing"
 
       - uses: actions/upload-artifact@v4
         with:
           name: gitworkshop-android-release
-          path: android/app/build/outputs/bundle/release/app-release.aab
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error

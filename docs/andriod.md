@@ -3,8 +3,8 @@
 Build a debug APK with `pnpm android:build`; it is written to
 `android/app/build/outputs/apk/debug/app-debug.apk`. Signed release builds
 require a local, ignored `android/signing.properties`; use
-`pnpm android:build:release` for the AAB or `pnpm android:build:release:apk`
-for the APK.
+`pnpm android:build:release` for both the AAB and APK, or
+`pnpm android:build:release:apk` for only the APK.
 
 ## Releases
 
@@ -15,9 +15,11 @@ Gradle derives a monotonically increasing `versionCode` as
 `major * 1_000_000 + minor * 1_000 + patch`.
 
 Push an `android-v<version>` tag matching `VERSION_NAME` (for example,
-`android-v3.0.0`) to run the signed AAB workflow. The Android bundle embeds
-that version in the web footer alongside its date and commit hash. Ordinary web
-builds instead identify themselves as `Web` plus their date and commit hash.
+`android-v3.0.0`) to run the signed AAB and APK workflow. It uploads both
+artifacts but deliberately does not publish to Zapstore yet; validate signed APK
+builds before enabling that publication. The Android bundle embeds that version
+in the web footer alongside its date and commit hash. Ordinary web builds instead
+identify themselves as `Web` plus their date and commit hash.
 
 Android App Links require the release signing certificate fingerprint in
 `public/.well-known/assetlinks.json` before deployment.
