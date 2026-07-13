@@ -1,10 +1,9 @@
 /**
  * CIChecksPanel — GitHub-style checks box for a PR / patch detail page.
  *
- * Displays ngit-ci workflow runs (kinds 9841/9842) grouped by
- * (runner, commit, workflow): a summary header, one expandable row per
- * workflow run for the current tip commit, and a collapsed section for runs
- * against superseded commits.
+ * Displays ngit-ci workflow runs (kinds 9841/9842): a summary header, one
+ * expandable row per workflow attempt for the current tip commit, and a
+ * collapsed section for runs against superseded commits.
  *
  * No trust filtering is applied yet — the signing runner identity is shown
  * on every row so users can judge results for themselves.
@@ -142,7 +141,10 @@ export function CIRunRow({
   const relativeTime = formatDistanceToNow(new Date(run.createdAt * 1000), {
     addSuffix: true,
   });
-  const primaryEvent = run.workflowResult?.event ?? run.pendingRun?.event;
+  const primaryEvent =
+    run.workflowResult?.event ??
+    run.pendingRun?.event ??
+    run.jobs[0]?.result.event;
 
   return (
     <li>
@@ -154,6 +156,7 @@ export function CIRunRow({
             <CIStatusIcon status={run.status} />
             <span className="truncate font-mono text-xs">
               {run.workflowPath ?? "(workflow)"}
+              {run.isOrphanedJob && " (job result)"}
             </span>
             <span className="hidden sm:inline shrink-0 text-xs text-muted-foreground">
               {run.status === "pending"

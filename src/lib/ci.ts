@@ -97,11 +97,11 @@ export interface CIJobResult {
 }
 
 /**
- * A workflow run group — all CI events sharing the same
- * (coordinator/runner pubkey, commit, workflow path).
+ * A workflow run attempt. A completed result is one immutable attempt; its
+ * `q` tags are the authoritative association to its completed job results.
  */
 export interface CIWorkflowRun {
-  /** Stable grouping key: `${pubkey}|${commitId}|${workflowPath}` */
+  /** Stable attempt key, derived from the workflow, progress, or job event id. */
   key: string;
   /** The coordinator / runner identity that signed the workflow/progress. */
   pubkey: string;
@@ -121,6 +121,8 @@ export interface CIWorkflowRun {
   prRootId: string | undefined;
   /** Latest completed result per job id, sorted by job id. */
   jobs: CIJobResult[];
+  /** True when this contains an unquoted job result without a workflow result. */
+  isOrphanedJob: boolean;
   /** Latest combined workflow result, when the coordinator published one. */
   workflowResult: CIResult | undefined;
   /** Jobs currently executing according to the latest progress marker. */
@@ -153,23 +155,17 @@ export function rollupCIStatuses(
   return "skipped";
 }
 
-function groupKey(
-  pubkey: string,
-  commitId: string | undefined,
-  workflowPath: string | undefined,
-): string {
-  return `${pubkey}|${commitId ?? ""}|${workflowPath ?? ""}`;
-}
-
 /**
  * Group CI casts into workflow runs.
  *
  * - Expired kind:39842 progress markers (NIP-40) are dropped.
- * - Within a group, only the latest kind:9841 per job id is kept.
- * - Kind:9842 workflow results provide the authoritative combined conclusion.
- * - A queued/in-progress marker counts as pending only when newer than every
- *   workflow result in its group (a re-run after previous results shows as
- *   pending again).
+ * - Every kind:9842 event is an independent completed workflow attempt, even
+ *   when several attempts use the same commit and workflow path.
+ * - A result only receives jobs that it explicitly quotes with `q` tags. An
+ *   unquoted job is retained as an orphaned partial attempt rather than being
+ *   incorrectly shown under an unrelated workflow result.
+ * - Each kind:39842 `d` tag identifies one progress attempt; an event without
+ *   a `d` tag remains a separate attempt.
  *
  * Returned runs are sorted most-recent-first.
  *
@@ -196,16 +192,18 @@ export function groupCIWorkflowRuns(
     prRootId: string | undefined;
     latestPerJob: Map<string, CIJobResultEvent>;
     latestWorkflowResult: CIResult | undefined;
-    latestResultAt: number;
     pendingRun: CIRun | undefined;
     inProgressJobs: Set<string>;
     createdAt: number;
+    isOrphanedJob: boolean;
   }
 
   const groups = new Map<string, Group>();
 
-  const getGroup = (ev: CIRun | CIResult | CIJobResultEvent): Group => {
-    const key = groupKey(ev.pubkey, ev.commitId, ev.workflowPath);
+  const getGroup = (
+    key: string,
+    ev: CIRun | CIResult | CIJobResultEvent,
+  ): Group => {
     let group = groups.get(key);
     if (!group) {
       group = {
@@ -220,10 +218,10 @@ export function groupCIWorkflowRuns(
         prRootId: ev.prRootId,
         latestPerJob: new Map(),
         latestWorkflowResult: undefined,
-        latestResultAt: 0,
         pendingRun: undefined,
         inProgressJobs: new Set(),
         createdAt: 0,
+        isOrphanedJob: false,
       };
       groups.set(key, group);
     }
@@ -250,31 +248,24 @@ export function groupCIWorkflowRuns(
     if (!existing || job.event.created_at > existing.event.created_at) {
       group.latestPerJob.set(jobId, job);
     }
-    group.latestResultAt = Math.max(group.latestResultAt, job.event.created_at);
   };
 
   for (const result of results) {
-    const group = getGroup(result);
-    if (
-      !group.latestWorkflowResult ||
-      result.event.created_at > group.latestWorkflowResult.event.created_at
-    ) {
-      group.latestWorkflowResult = result;
-    }
+    const group = getGroup(`result:${result.event.id}`, result);
+    group.latestWorkflowResult = result;
     for (const ref of result.jobRefs) {
       referencedJobIds.add(ref.eventId);
       const job = jobsById.get(ref.eventId);
       if (job) addJobToGroup(group, job, ref.jobId ?? job.jobId);
     }
-    group.latestResultAt = Math.max(
-      group.latestResultAt,
-      result.event.created_at,
-    );
   }
 
   for (const run of runs) {
     if (run.expiration !== undefined && run.expiration <= nowSecs) continue;
-    const group = getGroup(run);
+    const key = run.runId
+      ? `progress:${run.pubkey}:${run.runId}`
+      : `progress:${run.event.id}`;
+    const group = getGroup(key, run);
     if (
       !group.pendingRun ||
       run.event.created_at > group.pendingRun.event.created_at
@@ -291,7 +282,9 @@ export function groupCIWorkflowRuns(
 
   for (const job of jobResults) {
     if (referencedJobIds.has(job.event.id)) continue;
-    addJobToGroup(getGroup(job), job, job.jobId);
+    const group = getGroup(`orphaned-job:${job.event.id}`, job);
+    group.isOrphanedJob = true;
+    addJobToGroup(group, job, job.jobId);
   }
 
   const out: CIWorkflowRun[] = [];
@@ -328,6 +321,7 @@ export function groupCIWorkflowRuns(
       branchRef: group.branchRef,
       prRootId: group.prRootId,
       jobs,
+      isOrphanedJob: group.isOrphanedJob,
       workflowResult: group.latestWorkflowResult,
       inProgressJobs: [...group.inProgressJobs].sort(),
       pendingRun,

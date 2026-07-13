@@ -434,8 +434,9 @@ Job Result-specific tags on kind:9841 include `job`, `conclusion`, `logs`, and o
 
 ### Interpretation rules
 
-- Events are grouped into **workflow runs** by `(coordinator pubkey, commit, workflow path)`; a kind:9842 Workflow Result links the Job Results that make up that run through its `q` tags.
-- An unexpired kind:39842 Workflow Progress marker counts as **pending** while its `status` is `queued` or `in_progress`; a newer marker for the same `d` tag replaces the earlier state.
+- Each immutable kind:9842 event represents a distinct **workflow run attempt**, even when multiple attempts share the same coordinator, commit, and workflow path. A Workflow Result links only the Job Results that make up that attempt through its `q` tags; clients MUST NOT merge attempts merely because their shared context tags match.
+- A Job Result with matching `c` and `w` context but no available Workflow Result that quotes it is an **orphaned job result**. Clients SHOULD display it as a partial run rather than attaching it to an unrelated attempt or dropping it.
+- An unexpired kind:39842 Workflow Progress marker counts as **pending** while its `status` is `queued` or `in_progress`; a newer marker for the same `d` tag replaces the earlier state, while different `d` tags are separate attempts.
 - Roll-up uses the workflow's `conclusion`, with job-level `conclusion` values available from the referenced kind:9841 events. Clients MUST tolerate the NIP's standard conclusion values: `success`, `failure`, `neutral`, `cancelled`, `skipped`, `timed_out`, and `startup_failure`.
 - Clients MUST NOT require a kind:39842 progress marker to accept a kind:9842 Workflow Result — publishing progress is optional.
 
