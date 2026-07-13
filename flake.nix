@@ -57,6 +57,12 @@
             export JAVA_HOME=${pkgs.jdk21}
             export ANDROID_HOME=${android-sdk.androidsdk}/libexec/android-sdk
             export ANDROID_SDK_ROOT="$ANDROID_HOME"
+            # Capacitor only exposes telemetry as a per-machine CLI preference,
+            # not a project config option. Enforce the opt-out whenever this
+            # development shell is entered, once dependencies are installed.
+            if [ -x node_modules/.bin/cap ]; then
+              node_modules/.bin/cap telemetry off
+            fi
             # AGP normally downloads aapt2 from Maven, but that binary is not
             # runnable on NixOS. Use the aapt2 packaged in the Nix SDK instead.
             export GRADLE_OPTS="''${GRADLE_OPTS:+$GRADLE_OPTS }-Dorg.gradle.project.android.aapt2FromMavenOverride=$ANDROID_HOME/build-tools/35.0.0/aapt2"
