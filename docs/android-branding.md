@@ -22,11 +22,15 @@ nix shell nixpkgs#imagemagick --command ./scripts/generate-android-branding.sh
 ```
 
 The script writes the five standard Android density buckets (`mdpi` through
-`xxxhdpi`) for normal, round, and adaptive launcher icons. It also writes
-portrait and landscape density-qualified splash marks, plus padded Android 12+
-icons so the system splash mask cannot crop the branch endpoints. The XML
-resources keep the splash background separate as `#16171e`; no device status or
-navigation bar pixels are baked into the images.
+`xxxhdpi`) for normal, round, and adaptive launcher icons. Android 8+ uses the
+adaptive primary icon, whose foreground is scaled into the system safe zone so
+the launcher mask leaves visible breathing room around the mark. `roundIcon`
+uses the round raster for App Info and other system surfaces. It also writes
+portrait and landscape density-qualified splash marks. Android 12+ uses the
+vector `drawable/splash_icon.xml`, which stays crisp at the system-selected
+size and scales the white mark into Android's circular splash-icon safe zone.
+The XML resources keep the splash background separate as `#16171e`; no device
+status or navigation bar pixels are baked into the images.
 
 `values/styles.xml` uses the same colour and AndroidX SplashScreen attributes
 for Android 12+, while `drawable/splash.xml` centres the density-qualified

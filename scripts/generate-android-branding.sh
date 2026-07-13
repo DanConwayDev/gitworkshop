@@ -39,7 +39,9 @@ declare -A launcher_sizes=(
 )
 
 # Adaptive foregrounds are 108dp. The purple maskable background is made
-# transparent because adaptive-icon supplies it as a separate solid layer.
+# transparent because adaptive-icon supplies it as a separate solid layer. The
+# mark itself occupies 80% of the foreground canvas so it remains inside the
+# launcher safe zone after Android applies its own icon mask.
 declare -A foreground_sizes=(
   [mdpi]=108
   [hdpi]=162
@@ -47,6 +49,7 @@ declare -A foreground_sizes=(
   [xxhdpi]=324
   [xxxhdpi]=432
 )
+adaptive_foreground_scale=0.8
 
 # Pre-Android-12 splash marks retain intrinsic size and are centered by the
 # splash layer-list. Portrait gets a slightly larger mark than landscape.
@@ -61,6 +64,8 @@ declare -A density_scales=(
 rm -f "$resource_dir/drawable/splash.png" \
   "$resource_dir/drawable/ic_launcher_background.xml" \
   "$resource_dir/drawable-v24/ic_launcher_foreground.xml" \
+  "$resource_dir/mipmap-anydpi-v26/ic_launcher_round.xml" \
+  "$resource_dir"/drawable-*/splash_icon.png \
   "$resource_dir"/drawable-port-*/splash.png \
   "$resource_dir"/drawable-land-*/splash.png
 
@@ -74,16 +79,13 @@ for density in "${!launcher_sizes[@]}"; do
     -compose CopyOpacity -composite "$resource_dir/mipmap-$density/ic_launcher_round.png"
 
   foreground_size="${foreground_sizes[$density]}"
-  "${image_magick[@]}" "$maskable_source" -alpha off -fuzz 2% -transparent "$brand_purple" -resize "${foreground_size}x${foreground_size}" "$resource_dir/mipmap-$density/ic_launcher_foreground.png"
+  foreground_mark_size=$(awk "BEGIN { print int($foreground_size * $adaptive_foreground_scale) }")
+  "${image_magick[@]}" "$maskable_source" -alpha off -fuzz 2% -transparent "$brand_purple" -resize "${foreground_mark_size}x${foreground_mark_size}" -gravity center -background none -extent "${foreground_size}x${foreground_size}" "$resource_dir/mipmap-$density/ic_launcher_foreground.png"
 
   scale="${density_scales[$density]}"
   port_size=$(awk "BEGIN { print int(120 * $scale) }")
   land_size=$(awk "BEGIN { print int(96 * $scale) }")
-  android12_icon_size=$(awk "BEGIN { print int(80 * $scale) }")
   mkdir -p "$resource_dir/drawable-port-$density" "$resource_dir/drawable-land-$density" "$resource_dir/drawable-$density"
   "${image_magick[@]}" "$regular_source" -resize "${port_size}x${port_size}" "$resource_dir/drawable-port-$density/splash_mark.png"
   "${image_magick[@]}" "$regular_source" -resize "${land_size}x${land_size}" "$resource_dir/drawable-land-$density/splash_mark.png"
-  # Android 12 applies its own circular splash mask. Pad the 80dp brand mark
-  # within a 120dp drawable so that mask cannot crop the branch endpoints.
-  "${image_magick[@]}" "$regular_source" -resize "${android12_icon_size}x${android12_icon_size}" -gravity center -background none -extent "${port_size}x${port_size}" "$resource_dir/drawable-$density/splash_icon.png"
 done
