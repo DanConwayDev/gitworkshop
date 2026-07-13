@@ -4,3 +4,4 @@ dist
 references
 .opencode
 android/**/build
+android/app/src/main/assets/public
