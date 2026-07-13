@@ -23,6 +23,7 @@ const NEXT_MODE: Record<ThemeMode, (os: "light" | "dark") => ThemeMode> = {
 
 const gitCommit = __GIT_COMMIT__;
 const commitDate = __COMMIT_DATE__;
+const releaseVersion = __APP_RELEASE_VERSION__;
 
 const NAV_SECTIONS = [
   {
@@ -111,6 +112,7 @@ export function AppFooter() {
         {/* Bottom bar */}
         <div className="border-t border-border/40 flex items-center justify-between h-10">
           <span className="text-xs text-muted-foreground/50">
+            {releaseVersion ? `Android v${releaseVersion} · ` : "Web · "}
             {commitDate}+{gitCommit.slice(0, 7)}
           </span>
 

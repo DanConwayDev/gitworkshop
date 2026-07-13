@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
-    "android:sync": "npm run build && cap sync android",
+    "android:sync": "set -a && . ./android/version.properties && set +a && APP_RELEASE_VERSION=\"$VERSION_NAME\" npm run build && cap sync android",
     "android:open": "cap open android",
     "android:build": "npm run android:sync && (cd android && ./gradlew assembleDebug)",
     "android:build:release": "pnpm android:sync && (cd android && ./gradlew bundleRelease)",
