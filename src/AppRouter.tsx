@@ -6,7 +6,7 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { nip19 } from "nostr-tools";
@@ -119,6 +119,72 @@ function NativeGitWorkshopLinks() {
       disposed = true;
       document.removeEventListener("click", handleDocumentClick);
       if (appUrlListener) void appUrlListener.remove();
+    };
+  }, [navigate]);
+
+  return null;
+}
+
+/**
+ * Maps Android's hardware Back button onto the WebView history managed by
+ * BrowserRouter. Open web dialogs receive their existing Escape behavior before
+ * route history is considered.
+ */
+function NativeAndroidBackButton() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
+
+  useEffect(() => {
+    if (Capacitor.getPlatform() !== "android") return;
+
+    let disposed = false;
+    let backButtonListener:
+      | Awaited<ReturnType<typeof App.addListener>>
+      | undefined;
+
+    void App.addListener("backButton", ({ canGoBack }) => {
+      if (disposed) return;
+
+      const openDialog = document.querySelector<HTMLElement>(
+        '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+      );
+      if (openDialog) {
+        openDialog.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Escape",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        return;
+      }
+
+      if (canGoBack) {
+        navigate(-1);
+        return;
+      }
+
+      if (locationRef.current.pathname !== "/") {
+        // A cold-start deep link can be the first WebView entry. Returning to
+        // the app root is safer than closing the app from that content page.
+        navigate("/", { replace: true });
+        return;
+      }
+
+      void App.exitApp();
+    }).then((listener) => {
+      if (disposed) {
+        void listener.remove();
+      } else {
+        backButtonListener = listener;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      if (backButtonListener) void backButtonListener.remove();
     };
   }, [navigate]);
 
@@ -302,6 +368,7 @@ function AppRouter() {
   return (
     <BrowserRouter>
       <NativeGitWorkshopLinks />
+      <NativeAndroidBackButton />
       <ScrollToTop />
       <div className="flex flex-col min-h-screen">
         <AppHeader />

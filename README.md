@@ -57,6 +57,16 @@ npm install --package-lock-only
 GitWorkshop has a Capacitor-backed Android APK build. `pnpm android:build`
 creates a debug APK at `android/app/build/outputs/apk/debug/app-debug.apk`.
 
+### Android Back navigation
+
+On native Android only, the hardware Back button follows the WebView's history
+one entry at a time. At `/` with no prior WebView entry, GitWorkshop exits. A
+cold-started deep link may be the first WebView entry even though it is not the
+root route; in that case, Back replaces the deep link with `/` instead of
+exiting. A subsequent Back at that root exits. Open web dialogs receive Escape
+first, so Back closes or preserves them according to their existing dialog
+behavior rather than navigating away.
+
 For signed releases, create and store the upload key securely **outside this
 repository** (for example, in encrypted offline or organisation-managed secret
 storage). Losing the signing key prevents publishing future updates to the same
