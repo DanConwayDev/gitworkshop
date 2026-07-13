@@ -58,6 +58,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Read Android version
+        id: version
+        run: |
+          set -eu
+          . ./android/version.properties
+          printf 'name=%s\n' "$VERSION_NAME" >> "$GITHUB_OUTPUT"
+
       - name: Verify Android release tag
         if: github.ref_type == 'tag'
         run: |
@@ -73,6 +80,18 @@ jobs:
       # publishing out of this workflow until the signed artifacts are verified.
       - run: pnpm android:build:release
 
+      - name: Name release artifacts
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          set -eu
+          release_dir="$RUNNER_TEMP/gitworkshop-android-v$VERSION_NAME"
+          mkdir -p "$release_dir"
+          cp android/app/build/outputs/apk/release/app-release.apk \
+            "$release_dir/gitworkshop-android-v$VERSION_NAME.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab \
+            "$release_dir/gitworkshop-android-v$VERSION_NAME.aab"
+
       # The AAB and APK have been signed at this point, so neither the keystore
       # nor the generated file containing its passwords is needed any longer.
       # Run even when the build fails after signing configuration is created.
@@ -84,8 +103,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: gitworkshop-android-release
+          name: gitworkshop-android-v${{ steps.version.outputs.name }}
           path: |
-            android/app/build/outputs/apk/release/app-release.apk
-            android/app/build/outputs/bundle/release/app-release.aab
+            ${{ runner.temp }}/gitworkshop-android-v${{ steps.version.outputs.name }}/gitworkshop-android-v${{ steps.version.outputs.name }}.apk
+            ${{ runner.temp }}/gitworkshop-android-v${{ steps.version.outputs.name }}/gitworkshop-android-v${{ steps.version.outputs.name }}.aab
           if-no-files-found: error
