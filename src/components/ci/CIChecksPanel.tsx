@@ -72,7 +72,7 @@ function parseLogTail(content: string): {
   };
 }
 
-function formatPendingRunStatus(run: CIRun): string {
+function formatPendingRunStatus(run: CIRun, nowSeconds: number): string {
   if (run.progressStatus === "queued") {
     const queuedAt = run.queuedAt ?? run.event.created_at;
     const queuePosition =
@@ -83,10 +83,30 @@ function formatPendingRunStatus(run: CIRun): string {
   }
 
   const startedAt = run.startedAt ?? run.queuedAt ?? run.event.created_at;
-  const duration = formatCIDuration(Date.now() / 1000 - startedAt);
+  const duration = formatCIDuration(nowSeconds - startedAt);
   return duration
     ? `running for ${duration}`
     : `started ${formatDistanceToNow(new Date(startedAt * 1000), { addSuffix: true })}`;
+}
+
+/**
+ * Keeps pending CI durations accurate without polling completed workflow rows.
+ */
+function useCurrentUnixSeconds(enabled: boolean): number {
+  const [nowSeconds, setNowSeconds] = useState(() =>
+    Math.floor(Date.now() / 1000),
+  );
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const tick = () => setNowSeconds(Math.floor(Date.now() / 1000));
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [enabled]);
+
+  return nowSeconds;
 }
 
 interface WorkflowTiming {
@@ -199,7 +219,13 @@ function WorkflowConclusion({ run }: { run: CIWorkflowRun }) {
   );
 }
 
-function WorkflowTimingDetails({ run }: { run: CIWorkflowRun }) {
+function WorkflowTimingDetails({
+  run,
+  nowSeconds,
+}: {
+  run: CIWorkflowRun;
+  nowSeconds: number;
+}) {
   const { queuedAt, startedAt, completedAt, queuePosition } =
     getWorkflowTiming(run);
   const hasQueuePhase =
@@ -210,7 +236,7 @@ function WorkflowTimingDetails({ run }: { run: CIWorkflowRun }) {
       ? undefined
       : startedAt - queuedAt,
   );
-  const executionEnd = completedAt ?? Math.floor(Date.now() / 1000);
+  const executionEnd = completedAt ?? nowSeconds;
   const executionDuration = formatCIDuration(
     startedAt === undefined ? undefined : executionEnd - startedAt,
   );
@@ -238,16 +264,12 @@ function WorkflowTimingDetails({ run }: { run: CIWorkflowRun }) {
         {startedAt !== undefined && (
           <TimingPhase
             label="Started"
-            detail={
-              completedAt === undefined && executionDuration
-                ? `running for ${executionDuration}`
-                : formatDistanceToNow(new Date(startedAt * 1000), {
-                    addSuffix: true,
-                  })
-            }
+            detail={formatDistanceToNow(new Date(startedAt * 1000), {
+              addSuffix: true,
+            })}
           />
         )}
-        {startedAt !== undefined && completedAt !== undefined && (
+        {startedAt !== undefined && (
           <TimingConnector duration={executionDuration} />
         )}
       </div>
@@ -367,9 +389,10 @@ export function CIRunRow({
   triggerContext?: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const nowSeconds = useCurrentUnixSeconds(run.status === "pending");
 
   const pendingStatus = run.pendingRun
-    ? formatPendingRunStatus(run.pendingRun)
+    ? formatPendingRunStatus(run.pendingRun, nowSeconds)
     : undefined;
   const primaryEvent =
     run.workflowResult?.event ??
@@ -421,7 +444,7 @@ export function CIRunRow({
 
         <CollapsibleContent>
           <div className="space-y-2 pb-3 pl-10 pr-4">
-            <WorkflowTimingDetails run={run} />
+            <WorkflowTimingDetails run={run} nowSeconds={nowSeconds} />
             {(run.runner || run.platform) && (
               <div className="text-[11px] text-muted-foreground">
                 {[run.runner, run.platform].filter(Boolean).join(" · ")}
@@ -430,7 +453,7 @@ export function CIRunRow({
             {run.pendingRun && (
               <div className="flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
                 <CIStatusIcon status="pending" className="h-3.5 w-3.5" />
-                Workflow {formatPendingRunStatus(run.pendingRun)}
+                Workflow {formatPendingRunStatus(run.pendingRun, nowSeconds)}
                 <EventCardActions event={run.pendingRun.event} />
               </div>
             )}

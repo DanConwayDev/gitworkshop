@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix CI workflow duration counters so running checks update every second.
+
 ## [3.0.3]
 
 - Visualize CI workflow queue, execution, and conclusion timing.
