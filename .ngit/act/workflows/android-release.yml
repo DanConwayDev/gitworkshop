@@ -1,0 +1,111 @@
+name: Android release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Configure release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -eu
+          : "${ANDROID_KEYSTORE_BASE64:?Set the ANDROID_KEYSTORE_BASE64 secret.}"
+          : "${ANDROID_KEYSTORE_PASSWORD:?Set the ANDROID_KEYSTORE_PASSWORD secret.}"
+          : "${ANDROID_KEY_ALIAS:?Set the ANDROID_KEY_ALIAS secret.}"
+
+          signing_dir="$RUNNER_TEMP/gitworkshop-signing"
+          keystore="$signing_dir/gitworkshop-upload.jks"
+          umask 077
+          mkdir -p "$signing_dir"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          cat > android/signing.properties <<EOF
+          storeFile=$keystore
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Read app version
+        id: version
+        run: |
+          set -eu
+          . ./version.properties
+          printf 'name=%s\n' "$APP_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify release tag
+        if: github.ref_type == 'tag'
+        run: |
+          set -eu
+          . ./version.properties
+          expected_tag="v$APP_VERSION"
+          if [ "$GITHUB_REF_NAME" != "$expected_tag" ]; then
+            printf 'Release tag must be %s, got %s\n' "$expected_tag" "$GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+      # Build both distributable formats in one Gradle invocation. Keep Zapstore
+      # publishing out of this workflow until the signed artifacts are verified.
+      - run: pnpm android:build:release
+
+      - name: Name release artifacts
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          set -eu
+          release_dir="$RUNNER_TEMP/gitworkshop-android-v$VERSION_NAME"
+          mkdir -p "$release_dir"
+          cp android/app/build/outputs/apk/release/app-release.apk \
+            "$release_dir/gitworkshop-android-v$VERSION_NAME.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab \
+            "$release_dir/gitworkshop-android-v$VERSION_NAME.aab"
+
+      # The AAB and APK have been signed at this point, so neither the keystore
+      # nor the generated file containing its passwords is needed any longer.
+      # Run even when the build fails after signing configuration is created.
+      - name: Remove release signing material
+        if: ${{ always() }}
+        run: |
+          rm -f android/signing.properties
+          rm -rf "$RUNNER_TEMP/gitworkshop-signing"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gitworkshop-android-v${{ steps.version.outputs.name }}
+          path: |
+            ${{ runner.temp }}/gitworkshop-android-v${{ steps.version.outputs.name }}/gitworkshop-android-v${{ steps.version.outputs.name }}.apk
+            ${{ runner.temp }}/gitworkshop-android-v${{ steps.version.outputs.name }}/gitworkshop-android-v${{ steps.version.outputs.name }}.aab
+          if-no-files-found: error

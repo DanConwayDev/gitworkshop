@@ -106,6 +106,9 @@ function manifestPlugin(): Plugin {
 export default defineConfig(() => ({
   define: {
     __APP_NAME__: JSON.stringify(name),
+    __APP_RELEASE_VERSION__: JSON.stringify(
+      process.env.APP_RELEASE_VERSION ?? null,
+    ),
     __GIT_COMMIT__: JSON.stringify(getGitCommit()),
     __COMMIT_DATE__: JSON.stringify(getCommitDate()),
   },

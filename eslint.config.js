@@ -8,7 +8,9 @@ import htmlParser from "@html-eslint/parser";
 import customRules from "./eslint-rules/index.js";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  // Android builds generate third-party JavaScript and HTML reports that are
+  // not project source and must not be linted by the repository-wide command.
+  { ignores: ["dist", "android/**/build/**"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

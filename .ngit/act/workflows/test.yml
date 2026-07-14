@@ -5,6 +5,10 @@ on:
   pull_request:
 
 jobs:
+  # `test:full` is the convenient local, sequential command for these checks.
+  # CI runs its parts separately instead: the Nix job has the web and e2e
+  # dependencies available, while Android lint needs its own JDK/SDK setup.
+  # Keeping them as jobs also lets the slower Android check run in parallel.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -28,3 +32,31 @@ jobs:
 
       - name: Run e2e tests
         run: nix develop --command pnpm test:e2e
+
+  android-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - run: pnpm install --frozen-lockfile
+
+      # Keep Android tooling outside the Nix job: this is the setup available
+      # to regular GitHub Actions and the intentionally minimal act runner.
+      - run: pnpm android:lint

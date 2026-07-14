@@ -52,6 +52,10 @@ pnpm add <package>
 npm install --package-lock-only
 ```
 
+## Android
+
+Android builds and the branding-regeneration script are documented in [docs/andriod.md](./docs/andriod.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). No GitHub PRs — contributions go over Nostr only.

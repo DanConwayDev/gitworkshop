@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import { Capacitor } from "@capacitor/core";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import App from "./App.tsx";
 import "./index.css";
@@ -6,8 +7,9 @@ import "@fontsource-variable/inter";
 
 // Unregister any service worker left behind by the previous codebase and clear
 // its caches. The tombstone SW (sw.js) handles the actual cleanup then removes
-// itself, so subsequent loads are fully uncontrolled.
-if ("serviceWorker" in navigator) {
+// itself, so subsequent loads are fully uncontrolled. Capacitor packages local
+// assets and does not use this web-deployment cleanup worker.
+if (!Capacitor.isNativePlatform() && "serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {
     /* ignore — browser may block in certain envs */
   });

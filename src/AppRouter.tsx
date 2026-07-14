@@ -3,8 +3,12 @@ import {
   Navigate,
   Route,
   Routes,
+  useNavigate,
   useLocation,
 } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { App } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 import { nip19 } from "nostr-tools";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { AppHeader } from "./components/AppHeader";
@@ -25,6 +29,167 @@ import OgImagePreview from "./pages/OgImagePreview";
 import NotFound from "./pages/NotFound";
 import { useRepoPath } from "./hooks/useRepoPath";
 import { REPO_KIND } from "./lib/nip34";
+import { getGitWorkshopPath } from "./lib/gitworkshopUrl";
+
+/**
+ * Handles public GitWorkshop links in native builds. This stays inside the
+ * BrowserRouter so both Android App Links and in-WebView clicks can use React
+ * Router without affecting ordinary web-browser navigation.
+ */
+function NativeGitWorkshopLinks() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const navigateToGitWorkshopUrl = (url: string) => {
+      const path = getGitWorkshopPath(url);
+      if (path) navigate(path);
+    };
+
+    const getInternalAnchorPath = (
+      anchor: HTMLAnchorElement,
+    ): string | null => {
+      const gitWorkshopPath = getGitWorkshopPath(anchor.href);
+      if (gitWorkshopPath) return gitWorkshopPath;
+
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("//") || /^[a-z][a-z\d+.-]*:/i.test(href)) {
+        return null;
+      }
+
+      const relativeUrl = new URL(href, window.location.href);
+      return `${relativeUrl.pathname}${relativeUrl.search}${relativeUrl.hash}`;
+    };
+
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const anchor = target.closest("a[href]");
+      if (
+        !(anchor instanceof HTMLAnchorElement) ||
+        anchor.target === "_blank" ||
+        anchor.hasAttribute("download") ||
+        anchor.rel.split(/\s+/).includes("external")
+      ) {
+        return;
+      }
+
+      const path = getInternalAnchorPath(anchor);
+      if (!path) return;
+
+      event.preventDefault();
+      navigate(path);
+    };
+
+    document.addEventListener("click", handleDocumentClick);
+
+    let disposed = false;
+    let appUrlListener: Awaited<ReturnType<typeof App.addListener>> | undefined;
+
+    void App.addListener("appUrlOpen", ({ url }) => {
+      if (!disposed) navigateToGitWorkshopUrl(url);
+    }).then((listener) => {
+      if (disposed) {
+        void listener.remove();
+      } else {
+        appUrlListener = listener;
+      }
+    });
+
+    // App Links delivered while Android cold-starts the activity are available
+    // here even if appUrlOpen fired before React completed mounting.
+    void App.getLaunchUrl().then((launchUrl) => {
+      if (!disposed && launchUrl) navigateToGitWorkshopUrl(launchUrl.url);
+    });
+
+    return () => {
+      disposed = true;
+      document.removeEventListener("click", handleDocumentClick);
+      if (appUrlListener) void appUrlListener.remove();
+    };
+  }, [navigate]);
+
+  return null;
+}
+
+/**
+ * Maps Android's hardware Back button onto the WebView history managed by
+ * BrowserRouter. Open web dialogs receive their existing Escape behavior before
+ * route history is considered.
+ */
+function NativeAndroidBackButton() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
+
+  useEffect(() => {
+    if (Capacitor.getPlatform() !== "android") return;
+
+    let disposed = false;
+    let backButtonListener:
+      | Awaited<ReturnType<typeof App.addListener>>
+      | undefined;
+
+    void App.addListener("backButton", ({ canGoBack }) => {
+      if (disposed) return;
+
+      const openDialog = document.querySelector<HTMLElement>(
+        '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+      );
+      if (openDialog) {
+        openDialog.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Escape",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        return;
+      }
+
+      if (canGoBack) {
+        navigate(-1);
+        return;
+      }
+
+      if (locationRef.current.pathname !== "/") {
+        // A cold-start deep link can be the first WebView entry. Returning to
+        // the app root is safer than closing the app from that content page.
+        navigate("/", { replace: true });
+        return;
+      }
+
+      void App.exitApp();
+    }).then((listener) => {
+      if (disposed) {
+        void listener.remove();
+      } else {
+        backButtonListener = listener;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      if (backButtonListener) void backButtonListener.remove();
+    };
+  }, [navigate]);
+
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // naddr + sub-path redirect
@@ -202,6 +367,8 @@ function LegacyRedirect() {
 function AppRouter() {
   return (
     <BrowserRouter>
+      <NativeGitWorkshopLinks />
+      <NativeAndroidBackButton />
       <ScrollToTop />
       <div className="flex flex-col min-h-screen">
         <AppHeader />

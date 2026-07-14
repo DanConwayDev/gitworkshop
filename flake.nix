@@ -19,7 +19,11 @@
   outputs = { nixpkgs, flake-utils, ngit-grasp, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+          config.android_sdk.accept_license = true;
+        };
         # ngit-grasp's upstream derivation runs `cargo test` during the nix
         # build; several of those tests need ambient state (git in PATH, etc.)
         # and fail inside the build sandbox. We only want the binary for the
@@ -28,15 +32,40 @@
           ngit-grasp.packages.${system}.default.overrideAttrs (_: {
             doCheck = false;
           });
+        android-sdk = pkgs.androidenv.composeAndroidPackages {
+          platformVersions = [ "36" ];
+          # Android Gradle Plugin 8.13 defaults to Build Tools 35.0.0. Include
+          # that version explicitly because the Nix SDK is immutable and Gradle
+          # cannot install its default version at build time.
+          buildToolsVersions = [ "35.0.0" "36.0.0" ];
+        };
       in {
         devShell = pkgs.mkShell {
-          buildInputs = [ pkgs.nodejs pkgs.pnpm ngit-grasp-pkg ];
+          buildInputs = [
+            pkgs.nodejs
+            pkgs.pnpm
+            pkgs.jdk21
+            android-sdk.androidsdk
+            ngit-grasp-pkg
+          ];
           # Point the e2e harness at the pinned ngit-grasp binary. Without this
           # the harness falls back to the sibling-clone heuristic
           # (../ngit-grasp/target/release/ngit-grasp), which is fine for local
           # dev but not reproducible in CI.
           shellHook = ''
             export NGIT_GRASP_BIN=${ngit-grasp-pkg}/bin/ngit-grasp
+            export JAVA_HOME=${pkgs.jdk21}
+            export ANDROID_HOME=${android-sdk.androidsdk}/libexec/android-sdk
+            export ANDROID_SDK_ROOT="$ANDROID_HOME"
+            # Capacitor only exposes telemetry as a per-machine CLI preference,
+            # not a project config option. Enforce the opt-out whenever this
+            # development shell is entered, once dependencies are installed.
+            if [ -x node_modules/.bin/cap ]; then
+              node_modules/.bin/cap telemetry off
+            fi
+            # AGP normally downloads aapt2 from Maven, but that binary is not
+            # runnable on NixOS. Use the aapt2 packaged in the Nix SDK instead.
+            export GRADLE_OPTS="''${GRADLE_OPTS:+$GRADLE_OPTS }-Dorg.gradle.project.android.aapt2FromMavenOverride=$ANDROID_HOME/build-tools/35.0.0/aapt2"
 
             if git rev-parse --git-dir >/dev/null 2>&1; then
               hooks_dir="$(git rev-parse --git-dir)/hooks"
