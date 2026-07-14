@@ -154,6 +154,53 @@ export function rollupCIStatuses(
 }
 
 /**
+ * Tags shared by a Workflow Progress marker and its Workflow Result. These
+ * identify the trigger context, rather than the workflow alone: a branch push
+ * and an annotated-tag push can run the same workflow for the same commit.
+ */
+const WORKFLOW_ATTEMPT_CONTEXT_TAGS = new Set([
+  "a",
+  "c",
+  "w",
+  "o",
+  "x",
+  "r",
+  "E",
+  "K",
+  "P",
+  "e",
+  "k",
+  "p",
+  "runner",
+  "platform",
+]);
+
+/**
+ * Build the correlation key shared by an ngit-ci progress marker and its
+ * final result.
+ *
+ * Kind:9842 intentionally does not reference the kind:39842 event or its
+ * `d` identifier. The stable per-attempt value available to both events is
+ * `queued_at`; combine it with the coordinator and every shared context tag
+ * to avoid conflating distinct triggers of the same workflow and commit.
+ *
+ * A missing queue timestamp is deliberately not guessed. Leaving an older or
+ * malformed progress marker visible is safer than hiding a different attempt.
+ */
+function workflowAttemptContextKey(
+  event: CIRun | CIResult,
+): string | undefined {
+  if (event.queuedAt === undefined) return undefined;
+
+  const contextTags = event.event.tags
+    .filter(([name]) => WORKFLOW_ATTEMPT_CONTEXT_TAGS.has(name))
+    .map((tag) => JSON.stringify(tag))
+    .sort();
+
+  return JSON.stringify([event.pubkey, event.queuedAt, contextTags]);
+}
+
+/**
  * Group CI casts into workflow runs.
  *
  * - Expired and concluded kind:39842 progress markers are dropped. A progress
@@ -161,6 +208,10 @@ export function rollupCIStatuses(
  *   in progress; completed attempts are represented by their kind:9842 result.
  * - Every kind:9842 event is an independent completed workflow attempt, even
  *   when several attempts use the same commit and workflow path.
+ * - A pending kind:39842 marker is omitted once exactly one kind:9842 result
+ *   has the same coordinator, `queued_at`, and complete shared trigger
+ *   context. Kind:9842 does not carry the marker's `d` identifier, so an
+ *   ambiguous or incomplete correlation never hides a progress marker.
  * - A result only receives jobs that it explicitly quotes with `q` tags.
  *   Unquoted job results are not rendered as top-level runs: workflow results
  *   and progress events are the UI containers for their job details.
@@ -239,6 +290,20 @@ export function groupCIWorkflowRuns(
   const jobsById = new Map<string, CIJobResultEvent>();
   for (const job of jobResults) jobsById.set(eventIdKey(job.event.id), job);
 
+  // A result deliberately has no direct reference to its progress marker.
+  // Count correlation keys so that a malformed/ambiguous pair of results
+  // cannot accidentally conclude an unrelated pending marker.
+  const completedAttemptCounts = new Map<string, number>();
+  for (const result of results) {
+    const key = workflowAttemptContextKey(result);
+    if (key) {
+      completedAttemptCounts.set(
+        key,
+        (completedAttemptCounts.get(key) ?? 0) + 1,
+      );
+    }
+  }
+
   const addJobToGroup = (
     group: Group,
     job: CIJobResultEvent,
@@ -267,6 +332,12 @@ export function groupCIWorkflowRuns(
     ) {
       continue;
     }
+
+    const attemptKey = workflowAttemptContextKey(run);
+    if (attemptKey && completedAttemptCounts.get(attemptKey) === 1) {
+      continue;
+    }
+
     const key = run.runId
       ? `progress:${run.pubkey}:${run.runId}`
       : `progress:${run.event.id}`;
