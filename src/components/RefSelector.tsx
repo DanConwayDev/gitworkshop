@@ -1093,7 +1093,7 @@ export function RefSelector({
   const showSearch = totalRefs > 8;
 
   // Determine if the current ref is a tag and its verification status
-  const currentRefObj = refs.find((r) => r.name === currentRef);
+  const currentRefObj = refsWithStatus.find((r) => r.name === currentRef);
   const currentIsTag = currentRefObj?.isTag ?? false;
   const currentRefWithStatus = refsWithStatus.find(
     (r) => r.name === currentRef,
@@ -1111,7 +1111,9 @@ export function RefSelector({
 
   // Default branch name — used to revert when switching to a source that
   // doesn't have the current ref.
-  const defaultBranchRef = refs.find((r) => r.isDefault && r.isBranch);
+  const defaultBranchRef = refsWithStatus.find(
+    (r) => r.isDefault && r.isBranch,
+  );
   const handleRefRevertToDefault = useCallback(
     (newSource: string) => {
       if (defaultBranchRef) {

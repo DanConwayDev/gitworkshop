@@ -128,6 +128,37 @@ export function useRefsWithStatus({
     [selectedSource, stateBehindGit, isNoState, winnerUrl, aheadServerUrl],
   );
 
+  // The git pool's info-refs are a useful cross-server view, but they can lag
+  // behind a newly received signed state event. Include state-only refs so the
+  // selector updates as soon as the EventStore receives the event, rather than
+  // waiting for the pool's next info-refs fetch (or a page reload).
+  const refsIncludingState = useMemo(() => {
+    if (!repoState) return refs;
+
+    const refPaths = new Set(
+      refs.map(
+        (ref) => `${ref.isBranch ? "refs/heads/" : "refs/tags/"}${ref.name}`,
+      ),
+    );
+    const stateOnlyRefs: GitRef[] = [];
+
+    for (const stateRef of repoState.refs) {
+      const isBranch = stateRef.name.startsWith("refs/heads/");
+      const isTag = stateRef.name.startsWith("refs/tags/");
+      if ((!isBranch && !isTag) || refPaths.has(stateRef.name)) continue;
+
+      stateOnlyRefs.push({
+        name: stateRef.name.replace(/^refs\/(?:heads|tags)\//, ""),
+        hash: stateRef.commitId,
+        isBranch,
+        isTag,
+        isDefault: stateRef.name === repoState.headRef,
+      });
+    }
+
+    return [...refs, ...stateOnlyRefs];
+  }, [refs, repoState]);
+
   // Compute status for each ref — against effectiveSource.
   // effectiveSource is always "nostr" or a concrete clone URL (never "default").
   const refsWithStatus: RefWithStatus[] = useMemo(() => {
@@ -137,7 +168,7 @@ export function useRefsWithStatus({
       // "nostr" (overriding a git-ahead situation), pass stateBehindGit=false
       // so refs are compared against the state even when the server is ahead.
       const behindGit = selectedSource === "nostr" ? false : stateBehindGit;
-      return refs.map((ref) => ({
+      return refsIncludingState.map((ref) => ({
         ...ref,
         ...getRefStatus(
           ref,
@@ -153,7 +184,7 @@ export function useRefsWithStatus({
     const serverUrlState = urlStates[effectiveSource];
     if (!serverUrlState?.infoRefs) {
       // Server not ready — fall back to nostr-state comparison
-      return refs.map((ref) => ({
+      return refsIncludingState.map((ref) => ({
         ...ref,
         ...getRefStatus(
           ref,
@@ -165,7 +196,7 @@ export function useRefsWithStatus({
         ),
       }));
     }
-    return refs.map((ref) => ({
+    return refsIncludingState.map((ref) => ({
       ...ref,
       ...getRefStatusForServer(
         ref,
@@ -176,7 +207,7 @@ export function useRefsWithStatus({
       ),
     }));
   }, [
-    refs,
+    refsIncludingState,
     repoState,
     repoRelayEose,
     stateBehindGit,
