@@ -26,9 +26,12 @@ import {
   Copy,
   ExternalLink,
   FileText,
+  GitBranch,
   Loader2,
+  Tag,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
   CollapsibleContent,
@@ -81,6 +84,38 @@ function formatPendingRunStatus(run: CIRun): string {
 
   const startedAt = run.startedAt ?? run.queuedAt ?? run.event.created_at;
   return `started ${formatDistanceToNow(new Date(startedAt * 1000), { addSuffix: true })}`;
+}
+
+/** A compact branch or tag badge for the git ref that caused a CI run. */
+export function CITriggerRefBadge({
+  ref,
+  className,
+}: {
+  ref: string | undefined;
+  className?: string;
+}) {
+  if (!ref) return undefined;
+
+  const isBranch = ref.startsWith("refs/heads/");
+  const isTag = ref.startsWith("refs/tags/");
+  if (!isBranch && !isTag) return undefined;
+
+  const name = ref.slice(isBranch ? "refs/heads/".length : "refs/tags/".length);
+  const Icon = isBranch ? GitBranch : Tag;
+
+  return (
+    <Badge
+      variant="secondary"
+      className={cn(
+        "h-5 max-w-40 gap-1 px-1.5 text-[10px] font-normal",
+        className,
+      )}
+      aria-label={`${isBranch ? "Branch" : "Tag"}: ${name}`}
+    >
+      <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
+      <span className="truncate">{name}</span>
+    </Badge>
+  );
 }
 
 export function CIChecksPanel({ checks, className }: CIChecksPanelProps) {
@@ -208,11 +243,12 @@ export function CIRunRow({
 
         <CollapsibleContent>
           <div className="space-y-2 pb-3 pl-10 pr-4">
-            {(run.runner || run.platform || run.trigger) && (
-              <div className="text-[11px] text-muted-foreground">
+            {(run.runner || run.platform || run.trigger || run.branchRef) && (
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                 {[run.runner, run.platform, run.trigger]
                   .filter(Boolean)
                   .join(" · ")}
+                <CITriggerRefBadge ref={run.branchRef} />
               </div>
             )}
             {run.pendingRun && (

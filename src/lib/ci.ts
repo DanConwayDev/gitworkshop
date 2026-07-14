@@ -115,7 +115,7 @@ export interface CIWorkflowRun {
   runner: string | undefined;
   /** Optional platform tag, when a publisher includes one. */
   platform: string | undefined;
-  /** Push trigger branch ref (`r` tag, e.g. refs/heads/main), when present. */
+  /** Push trigger git ref (`r` tag, e.g. refs/heads/main or refs/tags/v1.0). */
   branchRef: string | undefined;
   /** Root PR event id (`E` tag) for PR-triggered workflows, when present. */
   prRootId: string | undefined;

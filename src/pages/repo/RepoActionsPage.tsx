@@ -7,16 +7,16 @@
  * coordinate per maintainer, so the full coordinate set is queried.
  *
  * Rows reuse CIRunRow from the PR checks panel; each row shows its trigger
- * context (branch for pushes, a PR link for PR-triggered runs).
+ * context (branch or tag for pushes, a PR link for PR-triggered runs).
  */
 
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { GitBranch, GitPullRequest, X } from "lucide-react";
+import { GitPullRequest, X } from "lucide-react";
 import { useRepoContext } from "./RepoContext";
 import { useRepoCI } from "@/hooks/useCI";
-import { CIRunRow } from "@/components/ci/CIChecksPanel";
+import { CIRunRow, CITriggerRefBadge } from "@/components/ci/CIChecksPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -174,7 +174,7 @@ export default function RepoActionsPage() {
 
 /**
  * Trigger context for a run row — a PR link for PR-triggered runs, or the
- * branch name (linked to its commit history) for push-triggered runs.
+ * branch or tag name (linked to its commit history) for push-triggered runs.
  */
 function RunTriggerContext({
   run,
@@ -198,15 +198,23 @@ function RunTriggerContext({
     );
   }
 
-  const branch = run.branchRef?.replace(/^refs\/heads\//, "");
-  if (branch) {
+  const ref = run.branchRef;
+  if (!ref) return null;
+
+  const isBranch = ref.startsWith("refs/heads/");
+  const isTag = ref.startsWith("refs/tags/");
+  if (!isBranch && !isTag) return null;
+
+  const refName = isBranch
+    ? ref.slice("refs/heads/".length)
+    : ref.slice("refs/tags/".length);
+  if (refName) {
     return (
       <Link
-        to={`${basePath}/commits/${branch}`}
+        to={`${basePath}/commits/${refName}`}
         className="hidden sm:inline-flex items-center gap-1 max-w-32 hover:text-foreground hover:underline transition-colors"
       >
-        <GitBranch className="h-3 w-3 shrink-0" />
-        <span className="truncate">{branch}</span>
+        <CITriggerRefBadge ref={ref} />
       </Link>
     );
   }

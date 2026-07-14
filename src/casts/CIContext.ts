@@ -12,7 +12,7 @@
  *   ["runner", ...] / ["platform", ...] — optional legacy metadata
  *
  * Trigger context:
- *   push:      ["r", "refs/heads/<branch>"]
+ *   push:      ["r", "refs/heads/<branch>" | "refs/tags/<tag>"]
  *   PR:        NIP-22-style ["E", <pr-root>] / ["e", <pr-or-update-trigger>]
  */
 
@@ -104,7 +104,7 @@ export abstract class CIContextCast<
     );
   }
 
-  /** Push trigger branch ref (`r` tag, e.g. refs/heads/main). */
+  /** Push trigger git ref (`r` tag, e.g. refs/heads/main or refs/tags/v1.0). */
   get branchRef(): string | undefined {
     return getOrComputeCachedValue(this.event, BranchRefSymbol, () =>
       getTagValue(this.event, "r"),
