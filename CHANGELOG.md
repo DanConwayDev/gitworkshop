@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [3.0.3]
+
+- Visualize CI workflow queue, execution, and conclusion timing.
+
 ## [3.0.2]
 
 - Fix Zapstore publishing by restoring the persistent bunker signing client key.
