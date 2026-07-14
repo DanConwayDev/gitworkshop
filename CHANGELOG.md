@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [3.0.2]
+
+- Fix Zapstore publishing by restoring the persistent bunker signing client key.
+
 ## [3.0.1]
 
 - Show platform-aware release metadata alongside the build commit in the footer.
