@@ -132,6 +132,7 @@ jobs:
       - name: Publish to Zapstore
         env:
           SIGN_WITH: ${{ secrets.ZAPSTORE_BUNKER_URL }}
+          ZAPSTORE_CLIENT_KEY: ${{ secrets.ZAPSTORE_CLIENT_KEY }}
           VERSION_NAME: ${{ needs.build.outputs.version }}
           RELEASE_TAG: ${{ github.ref_name }}
           RELEASE_REF_TYPE: ${{ github.ref_type }}
@@ -139,6 +140,7 @@ jobs:
         run: |
           set -eu
           : "${SIGN_WITH:?Set the ZAPSTORE_BUNKER_URL secret.}"
+          : "${ZAPSTORE_CLIENT_KEY:?Set the ZAPSTORE_CLIENT_KEY secret.}"
 
           if [ "$RELEASE_REF_TYPE" = "tag" ]; then
             VERSION_NAME="${RELEASE_TAG#v}"
@@ -149,6 +151,15 @@ jobs:
 
           go install github.com/zapstore/zsp@latest
           export PATH="$(go env GOPATH)/bin:$PATH"
+
+          # zsp creates a NIP-46 client key on first use. Restore that key so
+          # the bunker recognizes this CI workflow as the same application.
+          bunker_pubkey="${SIGN_WITH#bunker://}"
+          bunker_pubkey="${bunker_pubkey%%\?*}"
+          test "$bunker_pubkey" != "$SIGN_WITH"
+          umask 077
+          mkdir -p ~/.config/zsp/bunker-keys
+          printf '%s\n' "$ZAPSTORE_CLIENT_KEY" > ~/.config/zsp/bunker-keys/"$bunker_pubkey".key
 
           release_config="$(mktemp zapstore-release.XXXXXX.yaml)"
           trap 'rm -f "$release_config"' EXIT
