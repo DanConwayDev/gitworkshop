@@ -101,7 +101,7 @@ export interface CIJobResult {
  * `q` tags are the authoritative association to its completed job results.
  */
 export interface CIWorkflowRun {
-  /** Stable attempt key, derived from the workflow, progress, or job event id. */
+  /** Stable attempt key, derived from the workflow result or progress event. */
   key: string;
   /** The coordinator / runner identity that signed the workflow/progress. */
   pubkey: string;
@@ -121,8 +121,6 @@ export interface CIWorkflowRun {
   prRootId: string | undefined;
   /** Latest completed result per job id, sorted by job id. */
   jobs: CIJobResult[];
-  /** True when this contains an unquoted job result without a workflow result. */
-  isOrphanedJob: boolean;
   /** Latest combined workflow result, when the coordinator published one. */
   workflowResult: CIResult | undefined;
   /** Jobs currently executing according to the latest progress marker. */
@@ -161,9 +159,9 @@ export function rollupCIStatuses(
  * - Expired kind:39842 progress markers (NIP-40) are dropped.
  * - Every kind:9842 event is an independent completed workflow attempt, even
  *   when several attempts use the same commit and workflow path.
- * - A result only receives jobs that it explicitly quotes with `q` tags. An
- *   unquoted job is retained as an orphaned partial attempt rather than being
- *   incorrectly shown under an unrelated workflow result.
+ * - A result only receives jobs that it explicitly quotes with `q` tags.
+ *   Unquoted job results are not rendered as top-level runs: workflow results
+ *   and progress events are the UI containers for their job details.
  * - Each kind:39842 `d` tag identifies one progress attempt; an event without
  *   a `d` tag remains a separate attempt.
  *
@@ -195,7 +193,6 @@ export function groupCIWorkflowRuns(
     pendingRun: CIRun | undefined;
     inProgressJobs: Set<string>;
     createdAt: number;
-    isOrphanedJob: boolean;
   }
 
   const groups = new Map<string, Group>();
@@ -221,7 +218,6 @@ export function groupCIWorkflowRuns(
         pendingRun: undefined,
         inProgressJobs: new Set(),
         createdAt: 0,
-        isOrphanedJob: false,
       };
       groups.set(key, group);
     }
@@ -236,12 +232,10 @@ export function groupCIWorkflowRuns(
   };
 
   // Nostr event ids are canonically lowercase hex, but accept uppercase ids
-  // from non-conforming `q` tags so a quoted job is not also rendered as an
-  // orphaned run.
+  // from non-conforming `q` tags when looking up a quoted job.
   const eventIdKey = (id: string) => id.toLowerCase();
   const jobsById = new Map<string, CIJobResultEvent>();
   for (const job of jobResults) jobsById.set(eventIdKey(job.event.id), job);
-  const referencedJobIds = new Set<string>();
 
   const addJobToGroup = (
     group: Group,
@@ -259,7 +253,6 @@ export function groupCIWorkflowRuns(
     group.latestWorkflowResult = result;
     for (const ref of result.jobRefs) {
       const eventId = eventIdKey(ref.eventId);
-      referencedJobIds.add(eventId);
       const job = jobsById.get(eventId);
       if (job) addJobToGroup(group, job, ref.jobId ?? job.jobId);
     }
@@ -280,17 +273,9 @@ export function groupCIWorkflowRuns(
     }
     for (const ref of run.jobRefs) {
       const eventId = eventIdKey(ref.eventId);
-      referencedJobIds.add(eventId);
       const job = jobsById.get(eventId);
       if (job) addJobToGroup(group, job, ref.jobId ?? job.jobId);
     }
-  }
-
-  for (const job of jobResults) {
-    if (referencedJobIds.has(eventIdKey(job.event.id))) continue;
-    const group = getGroup(`orphaned-job:${job.event.id}`, job);
-    group.isOrphanedJob = true;
-    addJobToGroup(group, job, job.jobId);
   }
 
   const out: CIWorkflowRun[] = [];
@@ -327,7 +312,6 @@ export function groupCIWorkflowRuns(
       branchRef: group.branchRef,
       prRootId: group.prRootId,
       jobs,
-      isOrphanedJob: group.isOrphanedJob,
       workflowResult: group.latestWorkflowResult,
       inProgressJobs: [...group.inProgressJobs].sort(),
       pendingRun,

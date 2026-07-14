@@ -182,7 +182,6 @@ export function CIRunRow({
             <CIStatusIcon status={run.status} />
             <span className="truncate font-mono text-xs">
               {run.workflowPath ?? "(workflow)"}
-              {run.isOrphanedJob && " (job result)"}
             </span>
             <span className="hidden sm:inline shrink-0 text-xs text-muted-foreground">
               {run.status === "pending"
