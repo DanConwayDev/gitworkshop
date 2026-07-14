@@ -154,8 +154,8 @@ function formatCompletedRunStatus(run: CIWorkflowRun): string {
 
 function TimingPhase({ label, detail }: { label: string; detail: string }) {
   return (
-    <div className="shrink-0">
-      <div className="font-medium text-foreground">{label}</div>
+    <div className="shrink-0 rounded-md bg-muted/50 px-2 py-1 text-center">
+      <div className="font-medium leading-tight text-foreground">{label}</div>
       <div className="text-[11px] text-muted-foreground">{detail}</div>
     </div>
   );
@@ -163,9 +163,13 @@ function TimingPhase({ label, detail }: { label: string; detail: string }) {
 
 function TimingConnector({ duration }: { duration: string | null }) {
   return (
-    <div className="flex w-12 shrink-0 flex-col items-center gap-0.5 text-[10px] text-muted-foreground sm:w-20">
-      <span>{duration ?? ""}</span>
-      <div className="w-full border-t border-border" />
+    <div className="relative flex w-12 shrink-0 items-center justify-center self-stretch sm:w-20">
+      <div className="absolute inset-x-0 top-1/2 border-t border-border" />
+      {duration && (
+        <span className="relative bg-card px-1 text-[10px] text-muted-foreground">
+          {duration}
+        </span>
+      )}
     </div>
   );
 }
@@ -173,17 +177,22 @@ function TimingConnector({ duration }: { duration: string | null }) {
 function WorkflowConclusion({ run }: { run: CIWorkflowRun }) {
   const className =
     run.status === "success"
-      ? "text-emerald-500"
+      ? "bg-emerald-500/10 text-emerald-500"
       : run.status === "failure" ||
           run.status === "timed_out" ||
           run.status === "startup_failure"
-        ? "text-red-500"
+        ? "bg-red-500/10 text-red-500"
         : run.status === "pending"
-          ? "text-amber-500"
-          : "text-muted-foreground";
+          ? "bg-amber-500/10 text-amber-500"
+          : "bg-muted/50 text-muted-foreground";
 
   return (
-    <div className={cn("flex shrink-0 items-center gap-1.5", className)}>
+    <div
+      className={cn(
+        "flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1",
+        className,
+      )}
+    >
       <CIStatusIcon status={run.status} className="h-4 w-4" />
       <span className="text-sm font-medium">{ciStatusLabel(run.status)}</span>
     </div>
