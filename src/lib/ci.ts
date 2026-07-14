@@ -235,8 +235,12 @@ export function groupCIWorkflowRuns(
     return group;
   };
 
+  // Nostr event ids are canonically lowercase hex, but accept uppercase ids
+  // from non-conforming `q` tags so a quoted job is not also rendered as an
+  // orphaned run.
+  const eventIdKey = (id: string) => id.toLowerCase();
   const jobsById = new Map<string, CIJobResultEvent>();
-  for (const job of jobResults) jobsById.set(job.event.id, job);
+  for (const job of jobResults) jobsById.set(eventIdKey(job.event.id), job);
   const referencedJobIds = new Set<string>();
 
   const addJobToGroup = (
@@ -254,8 +258,9 @@ export function groupCIWorkflowRuns(
     const group = getGroup(`result:${result.event.id}`, result);
     group.latestWorkflowResult = result;
     for (const ref of result.jobRefs) {
-      referencedJobIds.add(ref.eventId);
-      const job = jobsById.get(ref.eventId);
+      const eventId = eventIdKey(ref.eventId);
+      referencedJobIds.add(eventId);
+      const job = jobsById.get(eventId);
       if (job) addJobToGroup(group, job, ref.jobId ?? job.jobId);
     }
   }
@@ -274,14 +279,15 @@ export function groupCIWorkflowRuns(
       group.inProgressJobs = new Set(run.inProgressJobs);
     }
     for (const ref of run.jobRefs) {
-      referencedJobIds.add(ref.eventId);
-      const job = jobsById.get(ref.eventId);
+      const eventId = eventIdKey(ref.eventId);
+      referencedJobIds.add(eventId);
+      const job = jobsById.get(eventId);
       if (job) addJobToGroup(group, job, ref.jobId ?? job.jobId);
     }
   }
 
   for (const job of jobResults) {
-    if (referencedJobIds.has(job.event.id)) continue;
+    if (referencedJobIds.has(eventIdKey(job.event.id))) continue;
     const group = getGroup(`orphaned-job:${job.event.id}`, job);
     group.isOrphanedJob = true;
     addJobToGroup(group, job, job.jobId);
