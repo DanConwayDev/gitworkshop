@@ -152,11 +152,54 @@ function formatCompletedRunStatus(run: CIWorkflowRun): string {
   return `${status} ${formatDistanceToNow(new Date(run.createdAt * 1000), { addSuffix: true })}`;
 }
 
+function TimingPhase({ label, detail }: { label: string; detail: string }) {
+  return (
+    <div className="shrink-0">
+      <div className="font-medium text-foreground">{label}</div>
+      <div className="text-[11px] text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function TimingConnector({ duration }: { duration: string | null }) {
+  return (
+    <div className="flex min-w-8 flex-1 flex-col items-center gap-0.5 text-[10px] text-muted-foreground">
+      <span>{duration ?? ""}</span>
+      <div className="w-full border-t border-border" />
+    </div>
+  );
+}
+
+function WorkflowConclusion({ run }: { run: CIWorkflowRun }) {
+  const className =
+    run.status === "success"
+      ? "text-emerald-500"
+      : run.status === "failure" ||
+          run.status === "timed_out" ||
+          run.status === "startup_failure"
+        ? "text-red-500"
+        : run.status === "pending"
+          ? "text-amber-500"
+          : "text-muted-foreground";
+
+  return (
+    <div
+      className={cn("ml-auto flex shrink-0 items-center gap-1.5", className)}
+    >
+      <CIStatusIcon status={run.status} className="h-4 w-4" />
+      <span className="text-sm font-medium">{ciStatusLabel(run.status)}</span>
+    </div>
+  );
+}
+
 function WorkflowTimingDetails({ run }: { run: CIWorkflowRun }) {
   const { queuedAt, startedAt, completedAt, queuePosition } =
     getWorkflowTiming(run);
+  const hasQueuePhase =
+    queuedAt !== undefined &&
+    (startedAt === undefined || queuedAt !== startedAt);
   const queueDuration = formatCIDuration(
-    queuedAt === undefined || startedAt === undefined
+    !hasQueuePhase || startedAt === undefined
       ? undefined
       : startedAt - queuedAt,
   );
@@ -174,37 +217,34 @@ function WorkflowTimingDetails({ run }: { run: CIWorkflowRun }) {
   }
 
   return (
-    <div className="space-y-1 rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
-      {queuedAt !== undefined && (
-        <div>
-          <span className="font-medium text-foreground">Queued</span>{" "}
-          {formatDistanceToNow(new Date(queuedAt * 1000), { addSuffix: true })}
-          {queuePosition !== undefined && ` (queue position ${queuePosition})`}
-        </div>
-      )}
-      {startedAt !== undefined && (
-        <div>
-          <span className="font-medium text-foreground">Started</span>{" "}
-          {queueDuration
-            ? `after waiting ${queueDuration}`
-            : formatDistanceToNow(new Date(startedAt * 1000), {
-                addSuffix: true,
-              })}
-          {completedAt === undefined &&
-            executionDuration &&
-            ` · running for ${executionDuration}`}
-        </div>
-      )}
-      {completedAt !== undefined && (
-        <div>
-          <span className="font-medium text-foreground">Concluded</span>{" "}
-          {executionDuration
-            ? `after running ${executionDuration}`
-            : formatDistanceToNow(new Date(completedAt * 1000), {
-                addSuffix: true,
-              })}
-        </div>
-      )}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border/60 px-3 py-2 text-xs">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {hasQueuePhase && queuedAt !== undefined && (
+          <TimingPhase
+            label="Queued"
+            detail={`${formatDistanceToNow(new Date(queuedAt * 1000), { addSuffix: true })}${queuePosition === undefined ? "" : ` (position ${queuePosition})`}`}
+          />
+        )}
+        {hasQueuePhase && startedAt !== undefined && (
+          <TimingConnector duration={queueDuration} />
+        )}
+        {startedAt !== undefined && (
+          <TimingPhase
+            label="Started"
+            detail={
+              completedAt === undefined && executionDuration
+                ? `running for ${executionDuration}`
+                : formatDistanceToNow(new Date(startedAt * 1000), {
+                    addSuffix: true,
+                  })
+            }
+          />
+        )}
+        {startedAt !== undefined && completedAt !== undefined && (
+          <TimingConnector duration={executionDuration} />
+        )}
+      </div>
+      <WorkflowConclusion run={run} />
     </div>
   );
 }
