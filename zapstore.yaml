@@ -1,0 +1,51 @@
+repository: naddr1qvzqqqrhnypzpgqgmmc409hm4xsdd74sf68a2uyf9pwel4g9mfdg8l5244t6x4jdqy2hwumn8ghj76twv3jhstnwva5hgtnyv4mz7qgwwaehxw309ahx7uewd3hkctcqpdnkjarhdaexkumgdacq04p0mt
+
+name: GitWorkshop
+
+summary: Nostr-native Git collaboration, without the platform.
+
+description: |
+  GitWorkshop is a Nostr-native client for issues, pull requests, code review,
+  and Git repository exploration.
+
+  Built on NIP-34 and GRASP, it keeps repository state on Nostr and fetches
+  Git data from redundant servers on demand—without a central platform.
+
+tags:
+  - nostr
+  - git
+  - collaboration
+  - code-review
+  - development
+  - decentralized
+
+license: MIT
+
+website: https://gitworkshop.dev
+
+icon: ./public/icons/icon-512x512.png
+
+release_notes: ./CHANGELOG.md
+
+supported_nips:
+  - "01" # Basic protocol: events, filters, subscriptions
+  - "05" # DNS-based identifiers
+  - "07" # Browser extension signing (window.nostr)
+  - "09" # Event deletion
+  - "19" # Bech32 identifiers (npub, nevent, naddr, nprofile)
+  - "21" # nostr: URI scheme
+  - "22" # Comment events
+  - "25" # Reactions
+  - "27" # Text note references (nostr: URI mentions)
+  - "31" # Dealing with unknown events (alt tags)
+  - "32" # Labeling
+  - "34" # Git stuff
+  - "42" # Relay authentication
+  - "44" # Versioned encryption
+  - "46" # Nostr remote signing / bunker
+  - "47" # Nostr Wallet Connect
+  - "51" # Lists
+  - "57" # Lightning zaps
+  - "65" # Relay list metadata
+  - "78" # Application-specific data
+  - "94" # File metadata
