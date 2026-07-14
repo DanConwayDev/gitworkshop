@@ -18,7 +18,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import {
   AlertCircle,
   Check,
@@ -89,36 +89,116 @@ function formatPendingRunStatus(run: CIRun): string {
     : `started ${formatDistanceToNow(new Date(startedAt * 1000), { addSuffix: true })}`;
 }
 
+interface WorkflowTiming {
+  queuedAt: number | undefined;
+  startedAt: number | undefined;
+  completedAt: number | undefined;
+  queuePosition: number | undefined;
+}
+
+function getWorkflowTiming(run: CIWorkflowRun): WorkflowTiming {
+  const earliestJobTimestamp = (
+    key: "queuedAt" | "startedAt",
+  ): number | undefined =>
+    run.jobs.reduce<number | undefined>((earliest, { result }) => {
+      const timestamp = result[key];
+      return timestamp === undefined
+        ? earliest
+        : Math.min(earliest ?? timestamp, timestamp);
+    }, undefined);
+  const latestJobCompletionAt = run.jobs.reduce<number | undefined>(
+    (latest, { result }) =>
+      latest === undefined
+        ? result.event.created_at
+        : Math.max(latest, result.event.created_at),
+    undefined,
+  );
+
+  return {
+    queuedAt:
+      run.pendingRun?.queuedAt ??
+      run.workflowResult?.queuedAt ??
+      earliestJobTimestamp("queuedAt"),
+    startedAt:
+      run.pendingRun?.startedAt ??
+      run.workflowResult?.startedAt ??
+      earliestJobTimestamp("startedAt"),
+    completedAt: run.pendingRun
+      ? undefined
+      : (run.workflowResult?.event.created_at ?? latestJobCompletionAt),
+    queuePosition: run.pendingRun?.queueRounds,
+  };
+}
+
 function formatCompletedRunStatus(run: CIWorkflowRun): string {
   const status = ciStatusLabel(run.status).toLowerCase();
+  const { startedAt, completedAt } = getWorkflowTiming(run);
   const isFailure =
     run.status === "failure" ||
     run.status === "timed_out" ||
     run.status === "startup_failure";
 
   if (isFailure) {
-    const startedAt =
-      run.workflowResult?.startedAt ??
-      run.jobs.reduce<number | undefined>(
-        (earliest, { result }) =>
-          result.startedAt === undefined
-            ? earliest
-            : Math.min(earliest ?? result.startedAt, result.startedAt),
-        undefined,
-      );
-    const completedAt =
-      run.workflowResult?.event.created_at ??
-      run.jobs.reduce(
-        (latest, { result }) => Math.max(latest, result.event.created_at),
-        0,
-      );
     const duration = formatCIDuration(
-      startedAt === undefined ? undefined : completedAt - startedAt,
+      startedAt === undefined || completedAt === undefined
+        ? undefined
+        : completedAt - startedAt,
     );
-    if (duration) return `${status} in ${duration}`;
+    if (duration) {
+      return `${status} · ${duration} · ${formatDistanceToNow(new Date(run.createdAt * 1000), { addSuffix: true })}`;
+    }
   }
 
   return `${status} ${formatDistanceToNow(new Date(run.createdAt * 1000), { addSuffix: true })}`;
+}
+
+function WorkflowTimingDetails({ run }: { run: CIWorkflowRun }) {
+  const { queuedAt, startedAt, completedAt, queuePosition } =
+    getWorkflowTiming(run);
+  const queueDuration = formatCIDuration(
+    queuedAt === undefined || startedAt === undefined
+      ? undefined
+      : startedAt - queuedAt,
+  );
+  const executionEnd = completedAt ?? Math.floor(Date.now() / 1000);
+  const executionDuration = formatCIDuration(
+    startedAt === undefined ? undefined : executionEnd - startedAt,
+  );
+
+  if (
+    queuedAt === undefined &&
+    startedAt === undefined &&
+    executionDuration === null
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-x-6 gap-y-2 rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground sm:grid-cols-2">
+      {queuedAt !== undefined && (
+        <div>
+          <span className="font-medium text-foreground">Queued</span>{" "}
+          {format(new Date(queuedAt * 1000), "MMM d, yyyy 'at' h:mm a")}
+          {queuePosition !== undefined && ` (queue position ${queuePosition})`}
+          {queueDuration && ` · waited ${queueDuration}`}
+        </div>
+      )}
+      {startedAt !== undefined && (
+        <div>
+          <span className="font-medium text-foreground">Started</span>{" "}
+          {format(new Date(startedAt * 1000), "MMM d, yyyy 'at' h:mm a")}
+          {executionDuration &&
+            ` · ${completedAt === undefined ? "running for" : "ran for"} ${executionDuration}`}
+        </div>
+      )}
+      {completedAt !== undefined && (
+        <div>
+          <span className="font-medium text-foreground">Completed</span>{" "}
+          {format(new Date(completedAt * 1000), "MMM d, yyyy 'at' h:mm a")}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** A compact branch or tag badge for the git ref that caused a CI run. */
@@ -261,20 +341,20 @@ export function CIRunRow({
               triggerRef={run.branchRef}
               className="shrink-0"
             />
-            <span className="hidden sm:inline shrink-0 text-xs text-muted-foreground">
-              {run.status === "pending"
-                ? pendingStatus
-                : formatCompletedRunStatus(run)}
-            </span>
+            {run.commitId && (
+              <code className="hidden sm:inline shrink-0 font-mono text-[10px] text-muted-foreground">
+                {run.commitId.slice(0, 7)}
+              </code>
+            )}
           </CollapsibleTrigger>
 
           <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
             {triggerContext}
-            {run.commitId && (
-              <code className="hidden sm:inline font-mono text-[10px]">
-                {run.commitId.slice(0, 7)}
-              </code>
-            )}
+            <span className="hidden sm:inline shrink-0">
+              {run.status === "pending"
+                ? pendingStatus
+                : formatCompletedRunStatus(run)}
+            </span>
             <UserLink
               pubkey={run.pubkey}
               avatarSize="xs"
@@ -286,6 +366,7 @@ export function CIRunRow({
 
         <CollapsibleContent>
           <div className="space-y-2 pb-3 pl-10 pr-4">
+            <WorkflowTimingDetails run={run} />
             {(run.runner || run.platform) && (
               <div className="text-[11px] text-muted-foreground">
                 {[run.runner, run.platform].filter(Boolean).join(" · ")}
