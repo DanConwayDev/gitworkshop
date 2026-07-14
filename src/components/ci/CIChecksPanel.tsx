@@ -78,12 +78,47 @@ function formatPendingRunStatus(run: CIRun): string {
     const queuePosition =
       run.queueRounds === undefined
         ? ""
-        : ` · ${run.queueRounds} capacity ${run.queueRounds === 1 ? "round" : "rounds"} ahead`;
+        : ` (queue position ${run.queueRounds})`;
     return `queued ${formatDistanceToNow(new Date(queuedAt * 1000), { addSuffix: true })}${queuePosition}`;
   }
 
   const startedAt = run.startedAt ?? run.queuedAt ?? run.event.created_at;
-  return `started ${formatDistanceToNow(new Date(startedAt * 1000), { addSuffix: true })}`;
+  const duration = formatCIDuration(Date.now() / 1000 - startedAt);
+  return duration
+    ? `running for ${duration}`
+    : `started ${formatDistanceToNow(new Date(startedAt * 1000), { addSuffix: true })}`;
+}
+
+function formatCompletedRunStatus(run: CIWorkflowRun): string {
+  const status = ciStatusLabel(run.status).toLowerCase();
+  const isFailure =
+    run.status === "failure" ||
+    run.status === "timed_out" ||
+    run.status === "startup_failure";
+
+  if (isFailure) {
+    const startedAt =
+      run.workflowResult?.startedAt ??
+      run.jobs.reduce<number | undefined>(
+        (earliest, { result }) =>
+          result.startedAt === undefined
+            ? earliest
+            : Math.min(earliest ?? result.startedAt, result.startedAt),
+        undefined,
+      );
+    const completedAt =
+      run.workflowResult?.event.created_at ??
+      run.jobs.reduce(
+        (latest, { result }) => Math.max(latest, result.event.created_at),
+        0,
+      );
+    const duration = formatCIDuration(
+      startedAt === undefined ? undefined : completedAt - startedAt,
+    );
+    if (duration) return `${status} in ${duration}`;
+  }
+
+  return `${status} ${formatDistanceToNow(new Date(run.createdAt * 1000), { addSuffix: true })}`;
 }
 
 /** A compact branch or tag badge for the git ref that caused a CI run. */
@@ -201,9 +236,6 @@ export function CIRunRow({
   const pendingStatus = run.pendingRun
     ? formatPendingRunStatus(run.pendingRun)
     : undefined;
-  const relativeTime = formatDistanceToNow(new Date(run.createdAt * 1000), {
-    addSuffix: true,
-  });
   const primaryEvent =
     run.workflowResult?.event ??
     run.pendingRun?.event ??
@@ -232,7 +264,7 @@ export function CIRunRow({
             <span className="hidden sm:inline shrink-0 text-xs text-muted-foreground">
               {run.status === "pending"
                 ? pendingStatus
-                : `${ciStatusLabel(run.status).toLowerCase()} ${relativeTime}`}
+                : formatCompletedRunStatus(run)}
             </span>
           </CollapsibleTrigger>
 
