@@ -26,7 +26,7 @@ website: https://gitworkshop.dev
 icon: ./public/icons/icon-512x512.png
 
 images:
-  - ./public/screenshots/landing-portrait.png
+  - ./screenshots/landing-portrait.png
 
 release_notes: ./CHANGELOG.md
 
