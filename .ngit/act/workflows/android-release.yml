@@ -13,6 +13,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -77,8 +79,8 @@ jobs:
             exit 1
           fi
 
-      # Build both distributable formats in one Gradle invocation. Keep Zapstore
-      # publishing out of this workflow until the signed artifacts are verified.
+      # Build both distributable formats in one Gradle invocation. Zapstore
+      # publishing runs in a dependent job using the uploaded signed APK.
       - run: pnpm android:build:release
 
       - name: Name release artifacts
@@ -109,3 +111,48 @@ jobs:
             ${{ runner.temp }}/gitworkshop-android-v${{ steps.version.outputs.name }}/gitworkshop-android-v${{ steps.version.outputs.name }}.apk
             ${{ runner.temp }}/gitworkshop-android-v${{ steps.version.outputs.name }}/gitworkshop-android-v${{ steps.version.outputs.name }}.aab
           if-no-files-found: error
+
+  publish-zapstore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Download signed APK
+        uses: actions/download-artifact@v4
+        with:
+          name: gitworkshop-android-v${{ needs.build.outputs.version }}
+          path: release-artifacts
+
+      - name: Publish to Zapstore
+        env:
+          SIGN_WITH: ${{ secrets.ZAPSTORE_BUNKER_URL }}
+          VERSION_NAME: ${{ needs.build.outputs.version }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
+          RELAY_URLS: wss://relay.zapstore.dev,wss://relay.ditto.pub,wss://relay.dreamith.to,wss://relay.primal.net
+        run: |
+          set -eu
+          : "${SIGN_WITH:?Set the ZAPSTORE_BUNKER_URL secret.}"
+
+          if [ "$RELEASE_REF_TYPE" = "tag" ]; then
+            VERSION_NAME="${RELEASE_TAG#v}"
+          fi
+
+          apk_path="release-artifacts/gitworkshop-android-v$VERSION_NAME.apk"
+          test -f "$apk_path"
+
+          go install github.com/zapstore/zsp@latest
+          export PATH="$(go env GOPATH)/bin:$PATH"
+
+          release_config="$(mktemp zapstore-release.XXXXXX.yaml)"
+          trap 'rm -f "$release_config"' EXIT
+          cp zapstore.yaml "$release_config"
+          sed -i "2i release_source: ./$apk_path" "$release_config"
+          sed -i "2i version: $VERSION_NAME" "$release_config"
+          zsp publish --quiet --skip-metadata --skip-preview "$release_config"
