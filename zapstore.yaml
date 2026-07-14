@@ -27,6 +27,10 @@ icon: ./public/icons/icon-512x512.png
 
 images:
   - ./screenshots/landing-portrait.png
+  - ./screenshots/repository-overview-portrait.png
+  - ./screenshots/inline-code-review-portrait.png
+  - ./screenshots/profile-activity-portrait.png
+  - ./screenshots/repository-search-portrait.png
 
 release_notes: ./CHANGELOG.md
 
