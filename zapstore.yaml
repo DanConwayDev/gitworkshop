@@ -31,6 +31,7 @@ images:
   - ./screenshots/inline-code-review-portrait.png
   - ./screenshots/profile-activity-portrait.png
   - ./screenshots/repository-search-portrait.png
+  - ./screenshots/ci-artifacts-portrait.png
 
 release_notes: ./CHANGELOG.md
 
