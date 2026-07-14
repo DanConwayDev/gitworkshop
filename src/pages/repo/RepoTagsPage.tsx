@@ -83,6 +83,7 @@ export default function RepoTagsPage() {
 
   const explorer = useGitExplorer(pool, poolState, {
     knownHeadCommit: bootstrapHeadCommit,
+    stateRefs: repoState?.refs,
   });
 
   const { tags, mismatchCount, effectiveSource } = useRefsWithStatus({

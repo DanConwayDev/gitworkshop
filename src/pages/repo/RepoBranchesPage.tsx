@@ -142,6 +142,7 @@ export default function RepoBranchesPage() {
 
   const explorer = useGitExplorer(pool, poolState, {
     knownHeadCommit: bootstrapHeadCommit,
+    stateRefs: repoState?.refs,
   });
 
   const { branches, mismatchCount, effectiveSource } = useRefsWithStatus({

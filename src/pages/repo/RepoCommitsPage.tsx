@@ -84,6 +84,7 @@ export default function RepoCommitsPage() {
   const explorer = useGitExplorer(pool, poolState, {
     refAndPath: commitsRef,
     knownHeadCommit: bootstrapHeadCommit,
+    stateRefs: repoState?.refs,
   });
 
   const resolvedRef = explorer.resolvedRef ?? undefined;
@@ -142,6 +143,7 @@ export default function RepoCommitsPage() {
   const explorerForSource = useGitExplorer(pool, poolState, {
     refAndPath: commitsRef,
     knownHeadCommit: effectiveHeadCommit,
+    stateRefs: repoState?.refs,
   });
 
   const useSourceExplorer =

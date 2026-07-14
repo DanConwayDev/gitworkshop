@@ -19,6 +19,7 @@ import type {
 } from "@/lib/vendored/git-natural-api";
 import type { GitGraspPool, PoolState } from "@/lib/git-grasp-pool";
 import { FULL_NEST_LIMIT } from "@/lib/git-grasp-pool/cache";
+import type { RepoStateRef } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -211,6 +212,34 @@ function parseRefs(info: InfoRefsUploadPackResponse): GitRef[] {
     if (a.isBranch !== b.isBranch) return a.isBranch ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
+}
+
+/**
+ * Include refs announced in the latest signed state while a git server's
+ * info-refs response is still catching up. This lets a newly announced tag or
+ * branch be resolved from its URL immediately after the ref selector shows it.
+ */
+function includeStateRefs(
+  info: InfoRefsUploadPackResponse,
+  stateRefs: RepoStateRef[] | undefined,
+): InfoRefsUploadPackResponse {
+  if (!stateRefs?.length) return info;
+
+  const refs = { ...info.refs };
+  let added = false;
+
+  for (const { name, commitId } of stateRefs) {
+    if (
+      (name.startsWith("refs/heads/") || name.startsWith("refs/tags/")) &&
+      commitId &&
+      !refs[name]
+    ) {
+      refs[name] = commitId;
+      added = true;
+    }
+  }
+
+  return added ? { ...info, refs } : info;
 }
 
 /**
@@ -419,6 +448,11 @@ export interface UseGitExplorerOptions {
    * When provided, used as the preferred commit to display.
    */
   knownHeadCommit?: string;
+  /**
+   * Refs from the latest signed repository state. Used to resolve newly
+   * announced refs before a git server refresh advertises them in info-refs.
+   */
+  stateRefs?: RepoStateRef[];
 }
 
 /**
@@ -435,7 +469,7 @@ export function useGitExplorer(
   poolState: PoolState,
   options: UseGitExplorerOptions = {},
 ): GitExplorerState & { reload: () => void } {
-  const { refAndPath, knownHeadCommit } = options;
+  const { refAndPath, knownHeadCommit, stateRefs } = options;
 
   const [state, setState] = useState<GitExplorerState>({
     loading: false,
@@ -482,13 +516,14 @@ export function useGitExplorer(
     const fastInfo = pool.getMergedInfoRefs();
 
     if (fastInfo) {
-      const fastParsedRefs = parseRefs(fastInfo);
+      const fastInfoWithState = includeStateRefs(fastInfo, stateRefs);
+      const fastParsedRefs = parseRefs(fastInfoWithState);
       let fastCommitHash: string | undefined;
       let fastResolvedRef: string | undefined;
       let fastResolvedPath: string | undefined;
 
       if (refAndPath) {
-        const resolved = resolveRefAndPath(refAndPath, fastInfo);
+        const resolved = resolveRefAndPath(refAndPath, fastInfoWithState);
         if (resolved) {
           fastCommitHash = resolved.hash;
           fastResolvedRef = shortRefName(resolved.refPath);
@@ -749,7 +784,8 @@ export function useGitExplorer(
 
     if (signal.aborted) return;
 
-    const parsedRefs = parseRefs(info);
+    const infoWithState = includeStateRefs(info, stateRefs);
+    const parsedRefs = parseRefs(infoWithState);
     setState((prev) => ({ ...prev, refs: parsedRefs }));
 
     // -----------------------------------------------------------------------
@@ -766,7 +802,7 @@ export function useGitExplorer(
     let fallbackCommitHash: string | undefined;
 
     if (refAndPath) {
-      const resolved = resolveRefAndPath(refAndPath, info);
+      const resolved = resolveRefAndPath(refAndPath, infoWithState);
       if (!resolved) {
         if (signal.aborted) return;
         setState((prev) => ({
@@ -989,7 +1025,7 @@ export function useGitExplorer(
       loading: false,
       pathExists: false,
     }));
-  }, [pool, refAndPath, knownHeadCommit]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pool, refAndPath, knownHeadCommit, stateRefs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-run when the pool changes or when the pool emits infoRefs for the
   // first time (poolState.health transitions away from "idle"/"connecting").

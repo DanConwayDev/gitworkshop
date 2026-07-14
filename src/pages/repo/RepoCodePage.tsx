@@ -161,6 +161,7 @@ export default function RepoCodePage() {
   const explorer = useGitExplorer(pool, poolState, {
     refAndPath: treeRefAndPath,
     knownHeadCommit: bootstrapHeadCommit,
+    stateRefs: repoState?.refs,
   });
 
   // Once the explorer has resolved the ref, derive the effective HEAD commit
@@ -221,6 +222,7 @@ export default function RepoCodePage() {
   const explorerForSource = useGitExplorer(pool, poolState, {
     refAndPath: treeRefAndPath,
     knownHeadCommit: effectiveHeadCommit,
+    stateRefs: repoState?.refs,
   });
 
   // Use the source-aware explorer when the effective source is a git server
