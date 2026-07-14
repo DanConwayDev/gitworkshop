@@ -88,19 +88,21 @@ function formatPendingRunStatus(run: CIRun): string {
 
 /** A compact branch or tag badge for the git ref that caused a CI run. */
 export function CITriggerRefBadge({
-  ref,
+  triggerRef,
   className,
 }: {
-  ref: string | undefined;
+  triggerRef: string | undefined;
   className?: string;
 }) {
-  if (!ref) return undefined;
+  if (!triggerRef) return undefined;
 
-  const isBranch = ref.startsWith("refs/heads/");
-  const isTag = ref.startsWith("refs/tags/");
+  const isBranch = triggerRef.startsWith("refs/heads/");
+  const isTag = triggerRef.startsWith("refs/tags/");
   if (!isBranch && !isTag) return undefined;
 
-  const name = ref.slice(isBranch ? "refs/heads/".length : "refs/tags/".length);
+  const name = triggerRef.slice(
+    isBranch ? "refs/heads/".length : "refs/tags/".length,
+  );
   const Icon = isBranch ? GitBranch : Tag;
 
   return (
@@ -218,6 +220,10 @@ export function CIRunRow({
             <span className="truncate font-mono text-xs">
               {run.workflowPath ?? "(workflow)"}
             </span>
+            <CITriggerRefBadge
+              triggerRef={run.branchRef}
+              className="shrink-0"
+            />
             <span className="hidden sm:inline shrink-0 text-xs text-muted-foreground">
               {run.status === "pending"
                 ? pendingStatus
@@ -248,7 +254,7 @@ export function CIRunRow({
                 {[run.runner, run.platform, run.trigger]
                   .filter(Boolean)
                   .join(" · ")}
-                <CITriggerRefBadge ref={run.branchRef} />
+                <CITriggerRefBadge triggerRef={run.branchRef} />
               </div>
             )}
             {run.pendingRun && (

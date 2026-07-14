@@ -214,7 +214,7 @@ function RunTriggerContext({
         to={`${basePath}/commits/${refName}`}
         className="hidden sm:inline-flex items-center gap-1 max-w-32 hover:text-foreground hover:underline transition-colors"
       >
-        <CITriggerRefBadge ref={ref} />
+        <CITriggerRefBadge triggerRef={ref} />
       </Link>
     );
   }
