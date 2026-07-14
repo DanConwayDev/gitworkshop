@@ -18,7 +18,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import {
   AlertCircle,
   Check,
@@ -174,27 +174,35 @@ function WorkflowTimingDetails({ run }: { run: CIWorkflowRun }) {
   }
 
   return (
-    <div className="grid gap-x-6 gap-y-2 rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground sm:grid-cols-2">
+    <div className="space-y-1 rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
       {queuedAt !== undefined && (
         <div>
           <span className="font-medium text-foreground">Queued</span>{" "}
-          {format(new Date(queuedAt * 1000), "MMM d, yyyy 'at' h:mm a")}
+          {formatDistanceToNow(new Date(queuedAt * 1000), { addSuffix: true })}
           {queuePosition !== undefined && ` (queue position ${queuePosition})`}
-          {queueDuration && ` · waited ${queueDuration}`}
         </div>
       )}
       {startedAt !== undefined && (
         <div>
           <span className="font-medium text-foreground">Started</span>{" "}
-          {format(new Date(startedAt * 1000), "MMM d, yyyy 'at' h:mm a")}
-          {executionDuration &&
-            ` · ${completedAt === undefined ? "running for" : "ran for"} ${executionDuration}`}
+          {queueDuration
+            ? `after waiting ${queueDuration}`
+            : formatDistanceToNow(new Date(startedAt * 1000), {
+                addSuffix: true,
+              })}
+          {completedAt === undefined &&
+            executionDuration &&
+            ` · running for ${executionDuration}`}
         </div>
       )}
       {completedAt !== undefined && (
         <div>
-          <span className="font-medium text-foreground">Completed</span>{" "}
-          {format(new Date(completedAt * 1000), "MMM d, yyyy 'at' h:mm a")}
+          <span className="font-medium text-foreground">Concluded</span>{" "}
+          {executionDuration
+            ? `after running ${executionDuration}`
+            : formatDistanceToNow(new Date(completedAt * 1000), {
+                addSuffix: true,
+              })}
         </div>
       )}
     </div>
