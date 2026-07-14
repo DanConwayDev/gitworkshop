@@ -163,7 +163,7 @@ function TimingPhase({ label, detail }: { label: string; detail: string }) {
 
 function TimingConnector({ duration }: { duration: string | null }) {
   return (
-    <div className="flex min-w-8 flex-1 flex-col items-center gap-0.5 text-[10px] text-muted-foreground">
+    <div className="flex w-12 shrink-0 flex-col items-center gap-0.5 text-[10px] text-muted-foreground sm:w-20">
       <span>{duration ?? ""}</span>
       <div className="w-full border-t border-border" />
     </div>
@@ -183,9 +183,7 @@ function WorkflowConclusion({ run }: { run: CIWorkflowRun }) {
           : "text-muted-foreground";
 
   return (
-    <div
-      className={cn("ml-auto flex shrink-0 items-center gap-1.5", className)}
-    >
+    <div className={cn("flex shrink-0 items-center gap-1.5", className)}>
       <CIStatusIcon status={run.status} className="h-4 w-4" />
       <span className="text-sm font-medium">{ciStatusLabel(run.status)}</span>
     </div>
@@ -217,8 +215,8 @@ function WorkflowTimingDetails({ run }: { run: CIWorkflowRun }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border/60 px-3 py-2 text-xs">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 py-1 text-xs">
+      <div className="flex items-center gap-2">
         {hasQueuePhase && queuedAt !== undefined && (
           <TimingPhase
             label="Queued"
