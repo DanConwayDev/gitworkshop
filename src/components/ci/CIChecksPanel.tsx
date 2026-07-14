@@ -220,6 +220,11 @@ export function CIRunRow({
             <span className="truncate font-mono text-xs">
               {run.workflowPath ?? "(workflow)"}
             </span>
+            {run.trigger && (
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {run.trigger}
+              </span>
+            )}
             <CITriggerRefBadge
               triggerRef={run.branchRef}
               className="shrink-0"
@@ -249,12 +254,9 @@ export function CIRunRow({
 
         <CollapsibleContent>
           <div className="space-y-2 pb-3 pl-10 pr-4">
-            {(run.runner || run.platform || run.trigger || run.branchRef) && (
-              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                {[run.runner, run.platform, run.trigger]
-                  .filter(Boolean)
-                  .join(" · ")}
-                <CITriggerRefBadge triggerRef={run.branchRef} />
+            {(run.runner || run.platform) && (
+              <div className="text-[11px] text-muted-foreground">
+                {[run.runner, run.platform].filter(Boolean).join(" · ")}
               </div>
             )}
             {run.pendingRun && (
