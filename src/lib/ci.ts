@@ -156,7 +156,9 @@ export function rollupCIStatuses(
 /**
  * Group CI casts into workflow runs.
  *
- * - Expired kind:39842 progress markers (NIP-40) are dropped.
+ * - Expired and concluded kind:39842 progress markers are dropped. A progress
+ *   marker is a top-level container only while its workflow remains queued or
+ *   in progress; completed attempts are represented by their kind:9842 result.
  * - Every kind:9842 event is an independent completed workflow attempt, even
  *   when several attempts use the same commit and workflow path.
  * - A result only receives jobs that it explicitly quotes with `q` tags.
@@ -259,7 +261,12 @@ export function groupCIWorkflowRuns(
   }
 
   for (const run of runs) {
-    if (run.expiration !== undefined && run.expiration <= nowSecs) continue;
+    if (
+      (run.expiration !== undefined && run.expiration <= nowSecs) ||
+      !run.isPending
+    ) {
+      continue;
+    }
     const key = run.runId
       ? `progress:${run.pubkey}:${run.runId}`
       : `progress:${run.event.id}`;
@@ -285,7 +292,7 @@ export function groupCIWorkflowRuns(
       .sort((a, b) => a.jobId.localeCompare(b.jobId));
 
     // A queued/in-progress marker only counts as pending when newer than the
-    // latest workflow result. Concluded progress markers are context only.
+    // latest workflow result.
     const pendingRun =
       group.pendingRun &&
       group.pendingRun.isPending &&
