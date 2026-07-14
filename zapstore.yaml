@@ -2,7 +2,7 @@ repository: naddr1qvzqqqrhnypzpgqgmmc409hm4xsdd74sf68a2uyf9pwel4g9mfdg8l5244t6x4
 
 name: GitWorkshop
 
-summary: Nostr-native Git collaboration, without the platform.
+summary: Git collaboration, without the platform.
 
 description: |
   GitWorkshop is a Nostr-native client for issues, pull requests, code review,
