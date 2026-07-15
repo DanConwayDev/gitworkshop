@@ -11,7 +11,10 @@ import { Quote } from "lucide-react";
 import type { NostrEvent } from "nostr-tools";
 import type { Filter } from "applesauce-core/helpers";
 import { map } from "rxjs/operators";
-import { EmbeddedEventPreview } from "@/components/EmbeddedEventPreview";
+import {
+  EmbeddedEventByIdPreview,
+  EmbeddedEventPreview,
+} from "@/components/EmbeddedEventPreview";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import {
@@ -33,6 +36,43 @@ function isDirectReplyTo(event: NostrEvent, rootId: string): boolean {
       (name === "e" &&
         id === rootId &&
         (marker === "root" || marker === "reply" || marker === undefined)),
+  );
+}
+
+function getCommentRootId(event: NostrEvent): string | undefined {
+  return event.tags.find(
+    ([name, , , marker]) => name === "E" || (name === "e" && marker === "root"),
+  )?.[1];
+}
+
+function isComment(event: NostrEvent): boolean {
+  return (
+    event.kind === COMMENT_KIND ||
+    LEGACY_REPLY_KINDS.includes(
+      event.kind as (typeof LEGACY_REPLY_KINDS)[number],
+    )
+  );
+}
+
+function MentionedItem({ event }: { event: NostrEvent }) {
+  const commentRootId = isComment(event) ? getCommentRootId(event) : undefined;
+
+  if (!commentRootId) {
+    return (
+      <EmbeddedEventPreview event={event} className="my-0 bg-background/70" />
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <EmbeddedEventByIdPreview
+        pointer={{ id: commentRootId }}
+        className="my-0 bg-background/70"
+      />
+      <div className="ml-3 border-l border-primary/30 pl-2">
+        <EmbeddedEventPreview event={event} className="my-0 bg-background/70" />
+      </div>
+    </div>
   );
 }
 
@@ -82,19 +122,11 @@ export function MentionedNip34Items({ rootId }: MentionedNip34ItemsProps) {
         <Quote className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div>
           <h2 className="font-medium text-foreground">Mentioned in</h2>
-          <p className="text-xs text-muted-foreground">
-            Related discussions that reference this item. They are not replies
-            in this conversation.
-          </p>
         </div>
       </div>
       <div className="mt-2 space-y-1">
         {mentionedItems.map((event) => (
-          <EmbeddedEventPreview
-            key={event.id}
-            event={event}
-            className="my-0 bg-background/70"
-          />
+          <MentionedItem key={event.id} event={event} />
         ))}
       </div>
     </section>
