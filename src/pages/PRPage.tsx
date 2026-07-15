@@ -1366,11 +1366,7 @@ export default function PRPage() {
                   repoCoords={repoAllCoords ?? pr.repoCoords}
                 />
 
-                <MentionedNip34Items
-                  rootId={pr.rootEvent.id}
-                  repoCoords={repoAllCoords ?? pr.repoCoords}
-                  maintainers={selectedMaintainers}
-                />
+                <MentionedNip34Items rootId={pr.rootEvent.id} />
 
                 {/* Interleaved timeline */}
                 <div className="space-y-1">

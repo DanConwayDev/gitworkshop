@@ -298,11 +298,7 @@ export default function IssuePage() {
                 repoCoords={repoAllCoords ?? issue.repoCoords}
               />
 
-              <MentionedNip34Items
-                rootId={issue.rootEvent.id}
-                repoCoords={repoAllCoords ?? issue.repoCoords}
-                maintainers={selectedMaintainers}
-              />
+              <MentionedNip34Items rootId={issue.rootEvent.id} />
 
               {/* Thread: comments + subject renames */}
               <div className="space-y-3">

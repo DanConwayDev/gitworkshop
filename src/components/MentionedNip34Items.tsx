@@ -24,10 +24,6 @@ import {
 interface MentionedNip34ItemsProps {
   /** ID of the issue, PR, or patch being viewed. */
   rootId: string;
-  /** All coordinates for the resolved repository. */
-  repoCoords: string[];
-  /** Effective maintainer set used to authenticate root items. */
-  maintainers: Set<string> | undefined;
 }
 
 function isDirectReplyTo(event: NostrEvent, rootId: string): boolean {
@@ -40,22 +36,10 @@ function isDirectReplyTo(event: NostrEvent, rootId: string): boolean {
   );
 }
 
-export function MentionedNip34Items({
-  rootId,
-  repoCoords,
-  maintainers,
-}: MentionedNip34ItemsProps) {
+export function MentionedNip34Items({ rootId }: MentionedNip34ItemsProps) {
   const store = useEventStore();
-  const repoCoordsKey = repoCoords.join(",");
-  const maintainersKey = maintainers
-    ? [...maintainers].sort().join(",")
-    : undefined;
 
   const mentionedItems = use$(() => {
-    // Do not surface root items until their authors can be checked against the
-    // repository maintainer set. Nostr root events are otherwise untrusted.
-    if (!maintainers || repoCoords.length === 0) return undefined;
-
     return store
       .timeline([
         {
@@ -75,29 +59,17 @@ export function MentionedNip34Items({
               if (event.id === rootId || isDirectReplyTo(event, rootId)) {
                 return false;
               }
-
-              const isRootItem =
-                event.kind === ISSUE_KIND ||
-                PR_ROOT_KINDS.includes(
-                  event.kind as (typeof PR_ROOT_KINDS)[number],
-                );
-              if (!isRootItem) return true;
-
-              // Root items affect repository state, so only show a root item
-              // from a confirmed maintainer and this same repository.
-              return (
-                maintainers.has(event.pubkey) &&
-                event.tags.some(
-                  ([name, coord]) => name === "a" && repoCoords.includes(coord),
-                )
-              );
+              // A quote is related context, not repository state. Its author
+              // and repository may legitimately differ from the current item;
+              // each linked item's detail page validates its own authority.
+              return true;
             })
             .sort(
               (a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id),
             ),
         ),
       );
-  }, [rootId, repoCoordsKey, maintainersKey, store]);
+  }, [rootId, store]);
 
   if (!mentionedItems || mentionedItems.length === 0) return null;
 
