@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { repoToPath, eventIdToNevent } from "@/lib/routeUtils";
+import { eventIdToNevent } from "@/lib/routeUtils";
 import { compactNumber } from "@/lib/utils";
 import { useSeoMeta } from "@unhead/react";
 import { useProfile } from "@/hooks/useProfile";
@@ -36,7 +36,7 @@ const TYPE_OPTIONS: MultiSelectOption[] = [
 const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open", "draft"];
 
 export default function RepoPRsPage() {
-  const { pubkey, repoId, resolved, prs, nip05 } = useRepoContext();
+  const { pubkey, repoId, resolved, prs, basePath } = useRepoContext();
   const repo = resolved?.repo;
   const repoOwnerProfile = useProfile(pubkey);
 
@@ -244,7 +244,7 @@ export default function RepoPRsPage() {
               <PRRow
                 key={pr.id}
                 pr={pr}
-                repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)}
+                repoPath={basePath}
                 repoRelays={repo?.relays ?? []}
               />
             ))}

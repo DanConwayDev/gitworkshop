@@ -72,7 +72,7 @@ import {
   getReplaceableAddress,
 } from "applesauce-core/helpers";
 import { cn } from "@/lib/utils";
-import { relayUrlToSegment, repoToPath } from "@/lib/routeUtils";
+import { relayUrlToSegment } from "@/lib/routeUtils";
 import { format } from "date-fns";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -286,14 +286,8 @@ function SidebarVariant({
   nostrCloneUrl: string | undefined;
   hasAnyCloneUrl: boolean;
 }) {
-  const { nip05 } = useRepoContext();
+  const { basePath: repoBasePath } = useRepoContext();
   const account = useActiveAccount();
-  const repoBasePath = repoToPath(
-    repo.selectedMaintainer,
-    repo.dTag,
-    repo.relays,
-    nip05,
-  );
   const aboutPath = `${repoBasePath}/about`;
   const editPath = `${repoBasePath}/settings`;
   const isMaintainer =
@@ -555,11 +549,11 @@ function FullVariant({
   repo: ResolvedRepo;
   nostrCloneUrl: string | undefined;
 }) {
-  const { nip05 } = useRepoContext();
+  const { basePath } = useRepoContext();
   const account = useActiveAccount();
   const isMaintainer =
     account?.pubkey && account.pubkey === repo.selectedMaintainer;
-  const editPath = `${repoToPath(repo.selectedMaintainer, repo.dTag, repo.relays, nip05)}/settings`;
+  const editPath = `${basePath}/settings`;
 
   // For union display: find which relays/clone URLs are from other maintainers
   const selectedAnnouncement = useMemo(

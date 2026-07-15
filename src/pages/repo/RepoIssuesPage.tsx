@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { repoToPath, eventIdToNevent } from "@/lib/routeUtils";
+import { eventIdToNevent } from "@/lib/routeUtils";
 import { compactNumber } from "@/lib/utils";
 import { useSeoMeta } from "@unhead/react";
 import { useProfile } from "@/hooks/useProfile";
@@ -46,7 +46,7 @@ import type { IssueStatus, ResolvedIssueLite } from "@/lib/nip34";
 const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open"];
 
 export default function RepoIssuesPage() {
-  const { pubkey, repoId, resolved, issues, nip05 } = useRepoContext();
+  const { pubkey, repoId, resolved, issues, basePath } = useRepoContext();
   const repo = resolved?.repo;
   const account = useActiveAccount();
   const repoOwnerProfile = useProfile(pubkey);
@@ -278,7 +278,7 @@ export default function RepoIssuesPage() {
               <IssueRow
                 key={issue.id}
                 issue={issue}
-                repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)}
+                repoPath={basePath}
                 repoRelays={repo?.relays ?? []}
               />
             ))}

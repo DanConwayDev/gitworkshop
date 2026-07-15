@@ -93,7 +93,7 @@ import {
   type ResolvedRepo,
 } from "@/lib/nip34";
 import type { RepositoryState } from "@/casts/RepositoryState";
-import { decodePubkeyIdentifier, repoToPath } from "@/lib/routeUtils";
+import { decodePubkeyIdentifier } from "@/lib/routeUtils";
 import { validateGraspServer } from "@/lib/grasp";
 import { publish } from "@/services/nostr";
 import { useGraspServers } from "@/hooks/useGraspServers";
@@ -234,18 +234,14 @@ function LeadBadge() {
 // ---------------------------------------------------------------------------
 
 export default function RepoSettingsPage() {
-  const { resolved, nip05, repoState } = useRepoContext();
+  const { resolved, repoState, basePath } = useRepoContext();
   const account = useActiveAccount();
   const repo = resolved?.repo;
 
   const isMaintainer =
     account?.pubkey && repo && account.pubkey === repo.selectedMaintainer;
 
-  const basePath = repo
-    ? repoToPath(repo.selectedMaintainer, repo.dTag, repo.relays, nip05)
-    : undefined;
-
-  if (!repo || !basePath) {
+  if (!repo) {
     return (
       <div className="container max-w-screen-xl px-4 md:px-8 py-8">
         <div className="flex items-center gap-2">
