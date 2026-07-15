@@ -117,6 +117,44 @@ export interface RepoRouteNip05 {
 
 export type ParsedRepoRoute = RepoRouteNpub | RepoRouteNip05;
 
+interface ParsedRelayAndRepoId {
+  relayHints: string[];
+  repoId: string;
+}
+
+/**
+ * Extract the optional relay hint and the repository identifier from all
+ * segments after an identity. This accepts both raw URL segments and decoded
+ * wildcard params for backwards compatibility. RepoLayout parses the raw
+ * location pathname so identifiers are decoded exactly once.
+ */
+function parseRelayAndRepoId(
+  segments: string[],
+): ParsedRelayAndRepoId | undefined {
+  const [first, second] = segments;
+  if (!first) return undefined;
+
+  // A decoded legacy ws:// relay is exposed as `ws:`, `host`; reconstruct it
+  // before parsing the d-tag.
+  if ((first === "ws:" || first === "wss:") && second) {
+    const relayHint = normalizeRelayHint(`${first}//${second}`);
+    return {
+      relayHints: relayHint ? [relayHint] : [],
+      repoId: segments.slice(2).join("/"),
+    };
+  }
+
+  if (segments.length > 1 && isRelayHint(first)) {
+    const relayHint = normalizeRelayHint(first);
+    return {
+      relayHints: relayHint ? [relayHint] : [],
+      repoId: segments.slice(1).join("/"),
+    };
+  }
+
+  return { relayHints: [], repoId: segments.join("/") };
+}
+
 // ---------------------------------------------------------------------------
 // Parser
 // ---------------------------------------------------------------------------
@@ -246,7 +284,11 @@ export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
     .filter(Boolean)
     .map((s) => {
       try {
-        return decodeURIComponent(s);
+        // React Router decodes wildcard params twice when a decoded percent
+        // sequence is itself a valid escape (for example, `%252F` becomes
+        // `/`). repoToPath protects those sequences with an extra `%25`;
+        // remove that protection before the single intentional decode here.
+        return decodeURIComponent(s.replace(/%2525([0-9A-F]{2})/gi, "%25$1"));
       } catch {
         return s;
       }
@@ -254,67 +296,20 @@ export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
 
   if (segments.length < 2) return undefined;
 
-  const [first, second] = segments;
+  const [first] = segments;
 
   // --- npub / hex-pubkey routes ---
   if (isPubkeyIdentifier(first)) {
     const pubkey = decodePubkeyIdentifier(first)!;
-
-    if (segments.length === 2) {
-      // /:npub/:repoId
-      return { type: "npub", pubkey, relayHints: [], repoId: second };
-    }
-
-    // The second segment is either a relay hint (domain-like, contains a dot)
-    // or the first component of a slash-containing d-tag decoded by React
-    // Router. A 64-char hex pubkey used as the first component of a
-    // gnostr-style d-tag has no dots, so isRelayHint() reliably distinguishes
-    // the two cases.
-    if (isRelayHint(second)) {
-      // /:npub/:relayHint/:repoId (where repoId may contain decoded slashes)
-      const relayHint = normalizeRelayHint(second);
-      return {
-        type: "npub",
-        pubkey,
-        relayHints: relayHint ? [relayHint] : [],
-        repoId: segments.slice(2).join("/"),
-      };
-    }
-    // /:npub/:repoId-part-a/:repoId-part-b/... (decoded %2F in d-tag)
-    return {
-      type: "npub",
-      pubkey,
-      relayHints: [],
-      repoId: segments.slice(1).join("/"),
-    };
+    const parsed = parseRelayAndRepoId(segments.slice(1));
+    return parsed && { type: "npub", pubkey, ...parsed };
   }
 
   // --- nip05 routes ---
   if (isNip05(first)) {
     const nip05 = standardizeNip05(first);
-
-    if (segments.length === 2) {
-      // /:nip05/:repoId
-      return { type: "nip05", nip05, relayHints: [], repoId: second };
-    }
-
-    if (isRelayHint(second)) {
-      // /:nip05/:relayHint/:repoId (where repoId may contain decoded slashes)
-      const relayHint = normalizeRelayHint(second);
-      return {
-        type: "nip05",
-        nip05,
-        relayHints: relayHint ? [relayHint] : [],
-        repoId: segments.slice(2).join("/"),
-      };
-    }
-    // /:nip05/:repoId-part-a/:repoId-part-b/... (decoded %2F in d-tag)
-    return {
-      type: "nip05",
-      nip05,
-      relayHints: [],
-      repoId: segments.slice(1).join("/"),
-    };
+    const parsed = parseRelayAndRepoId(segments.slice(1));
+    return parsed && { type: "nip05", nip05, ...parsed };
   }
 
   return undefined;
@@ -337,13 +332,15 @@ export function parseRelayUrl(raw: string): string | undefined {
 /**
  * Encode a relay URL for use as a route segment.
  * Strips wss:// (the common case) so URLs stay readable.
- * ws:// is kept as-is (URL-encoded) so the scheme is preserved on decode.
+ * ws:// uses a slash-free `ws:` prefix so React Router's wildcard decoding
+ * cannot turn its encoded slashes into extra route segments.
  */
 export function relayUrlToSegment(url: string): string {
   const normalized = normalizeUrl(url);
   if (normalized.startsWith("wss://")) return normalized.slice(6);
-  // ws:// — keep the scheme but URL-encode the colons/slashes
-  return encodeURIComponent(normalized);
+  // ws:// — encode only the colon. The resulting `ws:host` remains one
+  // segment after React Router decodes it.
+  return encodeURIComponent(`ws:${normalized.slice(5)}`);
 }
 
 /**
@@ -353,6 +350,9 @@ export function relayUrlToSegment(url: string): string {
 function normalizeRelayHint(hint: string): string | undefined {
   try {
     let url = decodeURIComponent(hint);
+    if (url.startsWith("ws:") && !url.startsWith("ws://")) {
+      url = `ws://${url.slice(3)}`;
+    }
     if (!url.includes("://")) url = "wss://" + url;
     return normalizeUrl(ensureWebSocketURL(url));
   } catch {
@@ -418,14 +418,17 @@ export function repoToPath(
   const identity = pubkeyToIdentity(pubkey, nip05);
 
   // Percent-encode the repo identifier so characters like spaces or emoji
-  // are safe as URL path segments (NIP-34 §nostr:// clone URL spec).
-  const encodedRepoId = encodeURIComponent(repoId);
+  // are safe as URL path segments (NIP-34 §nostr:// clone URL spec). Give a
+  // literal percent escape one extra layer of encoding: React Router otherwise
+  // decodes `%252F` twice and turns a literal `%2F` in the identifier into `/`.
+  const encodedRepoId = encodeURIComponent(repoId).replace(
+    /%25([0-9A-F]{2})/gi,
+    "%2525$1",
+  );
 
   const relay = relays[0];
   if (relay) {
-    // Strip scheme — wss://relay.damus.io → relay.damus.io
-    const hint = relay.replace(/^wss?:\/\//, "");
-    return `/${identity}/${hint}/${encodedRepoId}`;
+    return `/${identity}/${relayUrlToSegment(relay)}/${encodedRepoId}`;
   }
   return `/${identity}/${encodedRepoId}`;
 }

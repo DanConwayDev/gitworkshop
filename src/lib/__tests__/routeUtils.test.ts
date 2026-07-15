@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { matchRoutes } from "react-router-dom";
 import {
   parseRepoRoute,
   repoToPath,
@@ -18,6 +19,14 @@ const NPUB = "npub1mf6dfks9qaf82g8yl8n49k2evktujqxpyexs8d0m0myauvv88wqq54yc67";
 const GNOSTR_NIP05 = "vortex@vortex.gnostr.cloud";
 const GNOSTR_REPO_ID =
   "9edfa6a0bf147e7ea74b4f03dedfc1eddd3c4c29400ed2c9fca3e3b6499a3b45/vortex-sidecar-1776042879";
+
+/** Read the splat exactly as React Router passes it to `useParams()`. */
+function reactRouterSplat(pathname: string): string {
+  const matches = matchRoutes([{ path: "/*" }], pathname);
+  const splat = matches?.[0]?.params["*"];
+  if (splat === undefined) throw new Error("Expected route to match");
+  return splat;
+}
 
 // ---------------------------------------------------------------------------
 // 1. parseRepoRoute — baseline formats
@@ -241,8 +250,6 @@ describe("parseRepoRoute — invalid inputs return undefined", () => {
 // The function must not mistake the first half of a slash-containing d-tag for
 // a relay hint.
 //
-// These tests document BROKEN behaviour and are expected to fail until the
-// code is fixed.
 // ---------------------------------------------------------------------------
 
 describe("parseRepoRoute — pre-decoded slash in repoId (React Router decode bug)", () => {
@@ -351,24 +358,77 @@ describe("round-trip: repoToPath → parseRepoRoute", () => {
     expect(parsed?.repoId).toBe("my\u{1F3B8}repo");
   });
 
-  it("known gap: ws:// relay scheme is lost through repoToPath (becomes wss://)", () => {
-    // repoToPath strips both wss:// and ws:// via /^wss?:\/\// so the hint
-    // is stored without a scheme. On parse, normalizeRelayHint adds wss:// back.
+  it("round-trips a ws:// relay without losing its scheme", () => {
     const { path, parsed } = roundTrip(HEX_PUBKEY, "my-repo", [
       "ws://relay.example.com",
     ]);
-    // The path uses the hint without any scheme
-    expect(path).toContain("relay.example.com");
-    expect(path).not.toContain("ws://");
-    // The relay comes back as wss:// — the ws:// scheme has been lost
+    expect(path).toContain("ws%3Arelay.example.com");
     if (parsed?.type === "npub" && parsed.relayHints.length > 0) {
-      expect(parsed.relayHints[0]).toMatch(/^wss:\/\//);
+      expect(parsed.relayHints).toEqual(["ws://relay.example.com"]);
     }
   });
 });
 
 // ---------------------------------------------------------------------------
-// 9. relayUrlToSegment
+// 9. React Router wildcard decoding
+// ---------------------------------------------------------------------------
+
+describe("React Router wildcard decoding", () => {
+  it("preserves an encoded d-tag when linking to a repo sub-page", () => {
+    const repoId = "lightningdevkit/rust-lightning";
+    const path = `${repoToPath(HEX_PUBKEY, repoId, [
+      "wss://relay.gitpassport.xyz",
+    ])}/prs`;
+
+    expect(path).toContain("lightningdevkit%2Frust-lightning/prs");
+
+    // React Router decodes %2F in `useParams()["*"]`, but RepoLayout parses
+    // location.pathname to preserve the raw escape sequence and decode it once.
+    const splat = reactRouterSplat(path);
+    expect(splat).toContain("lightningdevkit/rust-lightning/prs");
+    expect(parseRepoRoute(path.slice(1))?.repoId).toBe(repoId);
+  });
+
+  it("preserves a ws:// relay and slash-containing d-tag after decoding", () => {
+    const repoId = "lightningdevkit/rust-lightning";
+    const path = repoToPath(HEX_PUBKEY, repoId, ["ws://relay.example.com"]);
+
+    expect(path).toContain("ws%3Arelay.example.com");
+    expect(path).toContain("lightningdevkit%2Frust-lightning");
+
+    const parsed = parseRepoRoute(path.slice(1));
+    expect(parsed?.repoId).toBe(repoId);
+    if (parsed?.type === "npub") {
+      expect(parsed.relayHints).toEqual(["ws://relay.example.com"]);
+    }
+  });
+
+  it("accepts legacy ws:// relay hints after React Router decodes them", () => {
+    const path = `/${NPUB}/ws%3A%2F%2Frelay.example.com/lightningdevkit%2Frust-lightning`;
+    const parsed = parseRepoRoute(reactRouterSplat(path));
+
+    expect(parsed?.repoId).toBe("lightningdevkit/rust-lightning");
+    if (parsed?.type === "npub") {
+      expect(parsed.relayHints).toEqual(["ws://relay.example.com"]);
+    }
+  });
+
+  it("does not decode a literal percent-encoded sequence in a d-tag twice", () => {
+    const repoId = "lightningdevkit%2Frust-lightning";
+    const path = repoToPath(HEX_PUBKEY, repoId, [
+      "wss://relay.gitpassport.xyz",
+    ]);
+
+    expect(path).toContain("lightningdevkit%25252Frust-lightning");
+    expect(reactRouterSplat(path)).toContain(
+      "lightningdevkit%252Frust-lightning",
+    );
+    expect(parseRepoRoute(path.slice(1))?.repoId).toBe(repoId);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. relayUrlToSegment
 // ---------------------------------------------------------------------------
 
 describe("relayUrlToSegment", () => {
@@ -380,15 +440,15 @@ describe("relayUrlToSegment", () => {
     expect(relayUrlToSegment("wss://relay.damus.io/")).toBe("relay.damus.io");
   });
 
-  it("URL-encodes ws:// URLs so the scheme survives in the path", () => {
+  it("uses a slash-free encoded ws: prefix so the scheme survives router decoding", () => {
     expect(relayUrlToSegment("ws://relay.example.com")).toBe(
-      "ws%3A%2F%2Frelay.example.com",
+      "ws%3Arelay.example.com",
     );
   });
 });
 
 // ---------------------------------------------------------------------------
-// 10. parseRelayUrl
+// 11. parseRelayUrl
 // ---------------------------------------------------------------------------
 
 describe("parseRelayUrl", () => {
@@ -400,7 +460,7 @@ describe("parseRelayUrl", () => {
     expect(parseRelayUrl("wss://relay.damus.io")).toBe("wss://relay.damus.io");
   });
 
-  it("decodes and normalises a ws%3A%2F%2F-encoded URL to ws://", () => {
+  it("decodes and normalises legacy ws%3A%2F%2F URLs to ws://", () => {
     expect(parseRelayUrl("ws%3A%2F%2Frelay.example.com")).toBe(
       "ws://relay.example.com",
     );
@@ -408,7 +468,7 @@ describe("parseRelayUrl", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 11. relayUrlToSegment + parseRelayUrl round-trips
+// 12. relayUrlToSegment + parseRelayUrl round-trips
 // ---------------------------------------------------------------------------
 
 describe("relayUrlToSegment → parseRelayUrl round-trip", () => {

@@ -62,9 +62,9 @@ export interface RepoContextValue {
    */
   prBasePath?: string;
   /**
-   * The canonical base path for the repo (no trailing sub-path), built from
-   * the splat by stripping any known sub-path keyword. Use this when building
-   * intra-repo links rather than recomputing from `window.location.pathname`.
+   * The canonical, percent-encoded base path for the repo with no trailing
+   * sub-path. Use this for intra-repo links rather than recomputing from
+   * decoded route params or `window.location.pathname`.
    */
   basePath: string;
 }

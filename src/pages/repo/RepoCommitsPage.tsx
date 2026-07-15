@@ -37,6 +37,7 @@ export default function RepoCommitsPage() {
     resolved,
     pubkey,
     repoId,
+    basePath,
   } = useRepoContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -192,13 +193,6 @@ export default function RepoCommitsPage() {
     ogImageAlt: repo?.name,
     twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
-
-  // Build base path for commit links (strip /commits/... suffix)
-  const basePath = useMemo(() => {
-    const pathname = window.location.pathname;
-    const idx = pathname.indexOf("/commits");
-    return idx !== -1 ? pathname.slice(0, idx) : pathname;
-  }, []);
 
   // Preserve the source query param when switching branches so the selected
   // source isn't silently reverted to default.

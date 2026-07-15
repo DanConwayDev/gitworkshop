@@ -60,6 +60,7 @@ import {
   parseRepoRoute,
   decodeEventIdentifier,
   isEventIdentifier,
+  repoToPath,
 } from "@/lib/routeUtils";
 import {
   GitCommitLinkContext,
@@ -78,9 +79,13 @@ export default function RepoLayout() {
   const { "*": splat } = useParams<{ "*": string }>();
   const location = useLocation();
 
+  // Use location.pathname rather than the decoded wildcard param when parsing
+  // the route. This preserves a literal percent sequence in a d-tag (for
+  // example `%2F` is emitted as `%252F`) and guarantees identifiers are
+  // decoded exactly once by parseRepoRoute.
   const parsed = useMemo(
-    () => (splat ? parseRepoRoute(splat) : undefined),
-    [splat],
+    () => parseRepoRoute(location.pathname.slice(1)),
+    [location.pathname],
   );
 
   // If the path doesn't parse as a repo route at all, show not-found immediately
@@ -275,31 +280,13 @@ function RepoLayoutResolved({
       ? repo.maintainerSet.includes(account.pubkey)
       : false;
 
-  // Build the base path from the splat so tab links stay consistent with
-  // whatever URL format the user arrived with (npub, nip05, relay hint, etc.)
-  // Strip any trailing sub-paths (issues, prs, about, edit, settings, tree, commit, commits)
-  // to get the repo root.
+  // Build an encoded base path for intra-repository links. `splat` is decoded
+  // by React Router, including `%2F` inside a repository identifier; using it
+  // directly would turn an identifier such as `lightningdevkit/rust-lightning`
+  // into multiple path segments when linking to `/prs`, `/issues`, etc.
   const basePath = useMemo(() => {
-    const full = `/${splat}`;
-    // Remove known sub-paths — find the first occurrence of any keyword
-    for (const keyword of [
-      "/issues",
-      "/prs",
-      "/about",
-      "/edit",
-      "/settings",
-      "/tree",
-      "/commit",
-      "/commits",
-      "/branches",
-      "/tags",
-      "/actions",
-    ]) {
-      const idx = full.indexOf(keyword);
-      if (idx !== -1) return full.slice(0, idx);
-    }
-    return full;
-  }, [splat]);
+    return repoToPath(pubkey, repoId, relayHints, nip05);
+  }, [pubkey, repoId, relayHints, nip05]);
 
   const isCodeTab =
     location.pathname.startsWith(`${basePath}/tree`) ||
@@ -456,14 +443,13 @@ function RepoLayoutResolved({
   // The PR base path: basePath + /prs/<prId> — used for PR sub-route links.
   const prBasePath = useMemo(() => {
     if (!prId) return undefined;
-    const full = `/${splat}`;
-    const prsIdx = full.indexOf("/prs/");
-    if (prsIdx === -1) return undefined;
-    // Find the end of the prId segment (next "/" after prs/<id>)
-    const afterPrs = prsIdx + "/prs/".length;
-    const nextSlash = full.indexOf("/", afterPrs);
-    return nextSlash === -1 ? full : full.slice(0, nextSlash);
-  }, [splat, prId]);
+    const segments = splat.split("/").filter(Boolean);
+    const prsIdx = segments.indexOf("prs");
+    const prIdSegment = segments[prsIdx + 1];
+    return prsIdx === -1 || !prIdSegment
+      ? undefined
+      : `${basePath}/prs/${prIdSegment}`;
+  }, [basePath, splat, prId]);
 
   const ctxValue: RepoContextValue | null =
     pubkey && repoId && resolved

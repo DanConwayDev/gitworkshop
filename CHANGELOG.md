@@ -4,6 +4,7 @@
 
 - Fix CI workflow duration counters so running checks update every second.
 - Show referenced work items and cross-repository comment mentions in discussions.
+- Preserve percent-encoded repository identifiers and relay hints in repository sub-page links.
 
 ## [3.0.3]
 

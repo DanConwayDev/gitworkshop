@@ -91,6 +91,7 @@ export default function RepoCodePage() {
     repoId,
     resolved,
     pubkey,
+    basePath,
   } = useRepoContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -261,13 +262,6 @@ export default function RepoCodePage() {
     ogImageAlt: repo?.name ?? repoId,
     twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
-
-  // Build the base URL for this repo (without /tree/...)
-  const basePath = useMemo(() => {
-    const pathname = window.location.pathname;
-    const treeIdx = pathname.indexOf("/tree");
-    return treeIdx !== -1 ? pathname.slice(0, treeIdx) : pathname;
-  }, []);
 
   // URL for a given ref + path. Branch names may contain "/" so we do NOT
   // encode them — the router receives the literal string and the explorer

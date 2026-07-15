@@ -21,12 +21,12 @@ import { EMPTY } from "rxjs";
  *
  * The segment uses the same encoding as relay hints in repo URLs:
  *   - wss:// is stripped:   relay.ngit.dev
- *   - ws:// is URL-encoded: ws%3A%2F%2Frelay.example.com
+ *   - ws:// uses a slash-free encoded scheme: ws%3Arelay.example.com
  *
  * Examples:
  *   /relay/relay.ngit.dev          → wss://relay.ngit.dev
  *   /relay/relay.damus.io          → wss://relay.damus.io
- *   /relay/ws%3A%2F%2Flocalhost    → ws://localhost
+ *   /relay/ws%3Alocalhost           → ws://localhost
  */
 export default function RelayPage() {
   const { relaySegment } = useParams<{ relaySegment: string }>();

@@ -396,9 +396,9 @@ function AppRouter() {
             <Route path="/about" element={<About />} />
             <Route path="/og-preview" element={<OgImagePreview />} />
             {/* /relay/:relaySegment — browse repos on a specific relay.
-                The segment uses the same format as relay hints: wss:// is stripped,
-                ws:// is URL-encoded. e.g. /relay/relay.ngit.dev
-                Must be declared before /:nip19 to avoid being swallowed. */}
+                 The segment uses the same format as relay hints: wss:// is stripped,
+                 ws:// uses a slash-free encoded scheme. e.g. /relay/relay.ngit.dev
+                 Must be declared before /:nip19 to avoid being swallowed. */}
             <Route path="/relay/:relaySegment" element={<RelayPage />} />
             {/* NIP-19 route for single-segment bech32 identifiers:
                 npub1…, nprofile1…, note1…, nevent1…, naddr1… */}

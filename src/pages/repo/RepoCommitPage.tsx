@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
 import { useProfile } from "@/hooks/useProfile";
@@ -12,7 +11,8 @@ import { isNonHttpUrl } from "@/lib/git-grasp-pool";
 import { IncompatibleProtocolError } from "@/components/IncompatibleProtocolError";
 
 export default function RepoCommitPage() {
-  const { cloneUrls, commitId, resolved, pubkey, repoId } = useRepoContext();
+  const { cloneUrls, commitId, resolved, pubkey, repoId, basePath } =
+    useRepoContext();
   const repo = resolved?.repo;
   const repoOwnerProfile = useProfile(pubkey);
 
@@ -25,12 +25,6 @@ export default function RepoCommitPage() {
     ogImageAlt: repo?.name,
     twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
-
-  const basePath = useMemo(() => {
-    const pathname = window.location.pathname;
-    const idx = pathname.indexOf("/commit/");
-    return idx !== -1 ? pathname.slice(0, idx) : pathname;
-  }, []);
 
   const { pool } = useGitPool(cloneUrls);
 
