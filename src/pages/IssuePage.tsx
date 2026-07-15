@@ -17,6 +17,7 @@ import {
   ZapMessageCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
+import { MentionedNip34Items } from "@/components/MentionedNip34Items";
 import { EventSearchStatus } from "@/components/EventSearchStatus";
 import { useResolvedIssue } from "@/hooks/useResolvedIssue";
 import type { RelayGroupSpec } from "@/hooks/useEventSearch";
@@ -295,6 +296,12 @@ export default function IssuePage() {
                 event={issue.rootEvent}
                 content={issue.body}
                 repoCoords={repoAllCoords ?? issue.repoCoords}
+              />
+
+              <MentionedNip34Items
+                rootId={issue.rootEvent.id}
+                repoCoords={repoAllCoords ?? issue.repoCoords}
+                maintainers={selectedMaintainers}
               />
 
               {/* Thread: comments + subject renames */}

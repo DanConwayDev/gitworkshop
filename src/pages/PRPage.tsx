@@ -21,6 +21,7 @@ import {
   ZapMessageCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
+import { MentionedNip34Items } from "@/components/MentionedNip34Items";
 
 import { useResolvedPR } from "@/hooks/useResolvedPR";
 import { EventSearchStatus } from "@/components/EventSearchStatus";
@@ -1363,6 +1364,12 @@ export default function PRPage() {
                     pr.itemType === "patch" && !!pr.hasCoverLetter
                   }
                   repoCoords={repoAllCoords ?? pr.repoCoords}
+                />
+
+                <MentionedNip34Items
+                  rootId={pr.rootEvent.id}
+                  repoCoords={repoAllCoords ?? pr.repoCoords}
+                  maintainers={selectedMaintainers}
                 />
 
                 {/* Interleaved timeline */}

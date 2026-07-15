@@ -384,6 +384,21 @@ function EventPreviewDispatcher({
   return <GenericPreviewContent event={event} />;
 }
 
+/** Render a compact preview for an event that is already available locally. */
+export function EmbeddedEventPreview({
+  event,
+  className,
+}: {
+  event: NostrEvent;
+  className?: string;
+}) {
+  return (
+    <PreviewContainer className={className}>
+      <EventPreviewDispatcher event={event} />
+    </PreviewContainer>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Loading skeleton
 // ---------------------------------------------------------------------------
