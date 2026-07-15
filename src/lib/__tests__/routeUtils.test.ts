@@ -210,11 +210,12 @@ describe("parseRepoRoute — invalid inputs return undefined", () => {
     expect(parseRepoRoute(NPUB)).toBeUndefined();
   });
 
-  it("returns undefined for 4+ unrecognised segments", () => {
-    // Three literal /-separated segments after stripping (none are sub-paths)
-    expect(
-      parseRepoRoute(`${NPUB}/relay.damus.io/extra/my-repo`),
-    ).toBeUndefined();
+  it("accepts slash-containing repo IDs after a relay hint", () => {
+    const parsed = parseRepoRoute(`${NPUB}/relay.damus.io/extra/my-repo`);
+    expect(parsed?.repoId).toBe("extra/my-repo");
+    if (parsed?.type === "npub") {
+      expect(parsed.relayHints).toEqual(["wss://relay.damus.io"]);
+    }
   });
 
   it("accepts a raw hex pubkey as the first segment", () => {

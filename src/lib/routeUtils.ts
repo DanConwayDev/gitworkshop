@@ -226,10 +226,14 @@ function stripSubPaths(splat: string): string {
  * Returns undefined if the path doesn't match any known repo route pattern.
  *
  * Segment layouts:
- *   [npub, repoId]
- *   [npub, relayHint, repoId]
- *   [nip05, repoId]
- *   [nip05, relayHint, repoId]
+ *   [npub, ...repoId]
+ *   [npub, relayHint, ...repoId]
+ *   [nip05, ...repoId]
+ *   [nip05, relayHint, ...repoId]
+ *
+ * Repository identifiers containing `/` are percent-encoded in generated
+ * links. React Router may decode those encoded slashes before this parser sees
+ * the splat, so all remaining segments belong to the identifier.
  */
 export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
   // Strip sub-paths (issues, about, issue IDs) before parsing
@@ -248,9 +252,9 @@ export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
       }
     });
 
-  if (segments.length < 2 || segments.length > 3) return undefined;
+  if (segments.length < 2) return undefined;
 
-  const [first, second, third] = segments;
+  const [first, second] = segments;
 
   // --- npub / hex-pubkey routes ---
   if (isPubkeyIdentifier(first)) {
@@ -261,27 +265,27 @@ export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
       return { type: "npub", pubkey, relayHints: [], repoId: second };
     }
 
-    // 3-segment case: second is either a relay hint (domain-like, contains a
-    // dot) or the first half of a slash-containing d-tag as decoded by React
-    // Router (%2F → /). A 64-char hex pubkey used as the first component of
-    // a gnostr-style d-tag has no dots, so isRelayHint() reliably
-    // distinguishes the two cases.
+    // The second segment is either a relay hint (domain-like, contains a dot)
+    // or the first component of a slash-containing d-tag decoded by React
+    // Router. A 64-char hex pubkey used as the first component of a
+    // gnostr-style d-tag has no dots, so isRelayHint() reliably distinguishes
+    // the two cases.
     if (isRelayHint(second)) {
-      // /:npub/:relayHint/:repoId
+      // /:npub/:relayHint/:repoId (where repoId may contain decoded slashes)
       const relayHint = normalizeRelayHint(second);
       return {
         type: "npub",
         pubkey,
         relayHints: relayHint ? [relayHint] : [],
-        repoId: third!,
+        repoId: segments.slice(2).join("/"),
       };
     }
-    // /:npub/:repoId-part-a/:repoId-part-b  (decoded %2F in d-tag)
+    // /:npub/:repoId-part-a/:repoId-part-b/... (decoded %2F in d-tag)
     return {
       type: "npub",
       pubkey,
       relayHints: [],
-      repoId: `${second}/${third}`,
+      repoId: segments.slice(1).join("/"),
     };
   }
 
@@ -295,21 +299,21 @@ export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
     }
 
     if (isRelayHint(second)) {
-      // /:nip05/:relayHint/:repoId
+      // /:nip05/:relayHint/:repoId (where repoId may contain decoded slashes)
       const relayHint = normalizeRelayHint(second);
       return {
         type: "nip05",
         nip05,
         relayHints: relayHint ? [relayHint] : [],
-        repoId: third!,
+        repoId: segments.slice(2).join("/"),
       };
     }
-    // /:nip05/:repoId-part-a/:repoId-part-b  (decoded %2F in d-tag)
+    // /:nip05/:repoId-part-a/:repoId-part-b/... (decoded %2F in d-tag)
     return {
       type: "nip05",
       nip05,
       relayHints: [],
-      repoId: `${second}/${third}`,
+      repoId: segments.slice(1).join("/"),
     };
   }
 
