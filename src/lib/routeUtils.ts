@@ -81,14 +81,18 @@ export function isNip05(s: string): boolean {
 
 /**
  * Returns true if the segment looks like a relay hint.
- * A relay hint is a domain-like string (contains a dot) that is NOT a nip05
- * address with a repo identifier following it. We detect it by the presence
- * of a dot in the segment — the same heuristic gitworkshop uses.
+ * A relay hint is normally a domain-like string (contains a dot). Localhost
+ * relay hints are also valid and essential for local-first development. The
+ * slash-free `ws:` form preserves plaintext relay schemes through routing.
  *
  * Note: relay hints are stored without the wss:// prefix in the URL.
  */
 export function isRelayHint(s: string): boolean {
-  return s.includes(".");
+  return (
+    s.includes(".") ||
+    /^localhost(?::\d+)?$/i.test(s) ||
+    /^(?:ws|wss):/i.test(s)
+  );
 }
 
 /** Normalise a NIP-05 address to the standardised user@domain.com form. */
