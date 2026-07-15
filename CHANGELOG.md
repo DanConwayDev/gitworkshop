@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Fix CI workflow duration counters so running checks update every second.
+- Show referenced work items and cross-repository comment mentions in discussions.
 
 ## [3.0.3]
 
