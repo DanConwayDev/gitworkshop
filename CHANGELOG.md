@@ -6,6 +6,7 @@
 - Show referenced work items and cross-repository comment mentions in discussions.
 - Preserve percent-encoded repository identifiers and the current relay hint in repository sub-page links.
 - Resolve repository relay hints for localhost, including plaintext `ws://` local relays.
+- Add Android NIP-55 login with Amber.
 
 ## [3.0.3]
 
