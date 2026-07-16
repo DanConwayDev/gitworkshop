@@ -7,6 +7,7 @@ import { Accounts } from "applesauce-accounts";
 import { NostrConnectAccount } from "applesauce-accounts/accounts";
 import type { IAccount } from "applesauce-accounts";
 import {
+  AmberClipboardSigner,
   ExtensionSigner,
   NostrConnectSigner,
   PrivateKeySigner,
@@ -56,9 +57,12 @@ export function applySignerNudge<T extends IAccount>(account: T): T {
         return typeof val === "function" ? val.bind(target) : val;
       },
     }) as typeof account.signer;
-  } else if (account instanceof Accounts.ExtensionAccount) {
-    // Extension signers benefit from the nudge (user may dismiss or ignore the
-    // browser popup) but have no relay connectivity to check.
+  } else if (
+    account instanceof Accounts.ExtensionAccount ||
+    account instanceof Accounts.AmberClipboardAccount
+  ) {
+    // Extension and Amber signers benefit from the nudge (the user may dismiss
+    // or miss the approval prompt) but have no relay connectivity to check.
     account.signer = signerWithNudge(account.signer) as typeof account.signer;
   }
   // PrivateKeyAccount: local signing is synchronous — no nudge needed.
@@ -69,6 +73,13 @@ export function applySignerNudge<T extends IAccount>(account: T): T {
 export function isMobileDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+/** Check whether the current device is running Android. */
+export function isAndroidDevice(): boolean {
+  return (
+    typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent)
+  );
 }
 
 /** Parameters for a pending nostrconnect:// session */
@@ -255,6 +266,40 @@ export function useLoginActions() {
         accounts.setActive(account);
       } catch (error) {
         console.error("Failed to login with extension:", error);
+        throw error;
+      }
+    },
+
+    /**
+     * Login with Amber through Android's NIP-55 signer intents.
+     * Amber returns the selected public key via the system clipboard when the
+     * app resumes, so this must be initiated directly from a user action.
+     */
+    async amber(): Promise<void> {
+      try {
+        const signer = new AmberClipboardSigner();
+        // The first NIP-55 request is also subject to the regular signer nudge
+        // so users are prompted to return to Amber if it does not respond.
+        const pubkey = await signerWithNudge(signer).getPublicKey();
+
+        // Only skip adding if this exact signer type is already present for
+        // the selected public key; users can keep other signer types too.
+        const existing = accounts
+          .getAccountsForPubkey(pubkey)
+          .find((a) => a instanceof Accounts.AmberClipboardAccount);
+        if (existing) {
+          accounts.setActive(existing);
+          signer.destroy();
+          return;
+        }
+
+        const account = applySignerNudge(
+          new Accounts.AmberClipboardAccount(pubkey, signer),
+        );
+        accounts.addAccount(account);
+        accounts.setActive(account);
+      } catch (error) {
+        console.error("Failed to login with Amber:", error);
         throw error;
       }
     },

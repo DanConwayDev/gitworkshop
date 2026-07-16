@@ -26,6 +26,7 @@ import { APP_NAME } from "@/lib/constants";
 import {
   useLoginActions,
   createNostrConnectSession,
+  isAndroidDevice,
   isMobileDevice,
   type NostrConnectSession,
 } from "@/hooks/useLoginActions";
@@ -81,11 +82,13 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
     bunker?: string;
     file?: string;
     extension?: string;
+    amber?: string;
   }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const login = useLoginActions();
   const isMobile = useIsMobile();
+  const isAndroid = isAndroidDevice();
   const hasExtension = "nostr" in window;
 
   // Relay editor state for the nostrconnect session
@@ -255,6 +258,28 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
     }
   };
 
+  const handleAmberLogin = async () => {
+    setIsLoading(true);
+    setErrors((prev) => ({ ...prev, amber: undefined }));
+
+    try {
+      await login.amber();
+      onLogin();
+      onClose();
+    } catch (error) {
+      console.error("Amber login failed:", error);
+      setErrors((prev) => ({
+        ...prev,
+        amber:
+          error instanceof Error
+            ? error.message
+            : "Unable to connect to Amber. Please try again.",
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const executeLogin = (key: string) => {
     setIsLoading(true);
     setErrors({});
@@ -398,6 +423,13 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
                   </Alert>
                 )}
 
+                {errors.amber && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>{errors.amber}</AlertDescription>
+                  </Alert>
+                )}
+
                 {hasExtension && (
                   <Button
                     className="w-full h-12 gap-3"
@@ -417,6 +449,18 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
                   <Key className="w-4 h-4" />
                   Secret Key
                 </Button>
+
+                {isAndroid && (
+                  <Button
+                    variant="outline"
+                    className="w-full h-12 gap-3"
+                    onClick={handleAmberLogin}
+                    disabled={isLoading}
+                  >
+                    <Key className="w-4 h-4" />
+                    {isLoading ? "Opening Amber..." : "Use Amber"}
+                  </Button>
+                )}
 
                 <Button
                   variant="outline"
