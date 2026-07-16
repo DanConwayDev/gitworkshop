@@ -17,7 +17,10 @@ import {
   ZapMessageCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
-import { MentionedNip34Items } from "@/components/MentionedNip34Items";
+import {
+  MentionedNip34Item,
+  useMentionedNip34Items,
+} from "@/components/MentionedNip34Items";
 import { EventSearchStatus } from "@/components/EventSearchStatus";
 import { useResolvedIssue } from "@/hooks/useResolvedIssue";
 import type { RelayGroupSpec } from "@/hooks/useEventSearch";
@@ -82,6 +85,24 @@ export default function IssuePage() {
     extraSearchGroups,
     retryKey,
   );
+  const mentionedItems = useMentionedNip34Items(issue?.rootEvent.id);
+  const timelineEntries = useMemo(() => {
+    if (!issue) return [];
+    return [
+      ...issue.timelineNodes.map((node) => ({
+        type: "timeline" as const,
+        node,
+      })),
+      ...(mentionedItems ?? []).map((event) => ({
+        type: "mention" as const,
+        event,
+      })),
+    ].sort(
+      (a, b) =>
+        (a.type === "mention" ? a.event.created_at : a.node.ts) -
+        (b.type === "mention" ? b.event.created_at : b.node.ts),
+    );
+  }, [issue, mentionedItems]);
 
   // Ordered priority pubkeys for @ mention autocomplete:
   // parent author first, then participants, then maintainers (deduped).
@@ -298,8 +319,6 @@ export default function IssuePage() {
                 repoCoords={repoAllCoords ?? issue.repoCoords}
               />
 
-              <MentionedNip34Items rootId={issue.rootEvent.id} />
-
               {/* Thread: comments + subject renames */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -311,7 +330,7 @@ export default function IssuePage() {
 
                 <Separator />
 
-                {issue.timelineNodes.length === 0 ? (
+                {timelineEntries.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground/60 text-sm">
                     No comments yet. The conversation awaits its first voice.
                   </div>
@@ -320,7 +339,16 @@ export default function IssuePage() {
                     className="min-w-0 border-l pl-1 space-y-0.5"
                     style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
                   >
-                    {issue.timelineNodes.map((node, idx) => {
+                    {timelineEntries.map((entry, idx) => {
+                      if (entry.type === "mention") {
+                        return (
+                          <MentionedNip34Item
+                            key={`mention-${entry.event.id}`}
+                            event={entry.event}
+                          />
+                        );
+                      }
+                      const { node } = entry;
                       if (node.type === "rename") {
                         return (
                           <SubjectRenameCard

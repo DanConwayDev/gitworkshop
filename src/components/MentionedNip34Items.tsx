@@ -4,8 +4,8 @@
  * Detail-page thread loading already retrieves every event with a `q` tag for
  * the current item. Events that belong to another discussion are not replies,
  * though: they merely reference this one.
- * Render them separately so they are discoverable without being mistaken for
- * part of the current conversation.
+ * They appear as top-level timeline entries, preserving the chronology of the
+ * discussion without being mistaken for replies in the current conversation.
  */
 import { Quote } from "lucide-react";
 import type { NostrEvent } from "nostr-tools";
@@ -23,11 +23,6 @@ import {
   LEGACY_REPLY_KINDS,
   PR_ROOT_KINDS,
 } from "@/lib/nip34";
-
-interface MentionedNip34ItemsProps {
-  /** ID of the issue, PR, or patch being viewed. */
-  rootId: string;
-}
 
 function isDirectReplyTo(event: NostrEvent, rootId: string): boolean {
   return event.tags.some(
@@ -54,7 +49,7 @@ function isComment(event: NostrEvent): boolean {
   );
 }
 
-function MentionedItem({ event }: { event: NostrEvent }) {
+function MentionedItemPreview({ event }: { event: NostrEvent }) {
   const commentRootId = isComment(event) ? getCommentRootId(event) : undefined;
 
   if (!commentRootId) {
@@ -76,10 +71,15 @@ function MentionedItem({ event }: { event: NostrEvent }) {
   );
 }
 
-export function MentionedNip34Items({ rootId }: MentionedNip34ItemsProps) {
+/**
+ * Returns events from other discussions that quote this item, oldest first so
+ * callers can interleave them with their own top-level timeline entries.
+ */
+export function useMentionedNip34Items(rootId: string | undefined) {
   const store = useEventStore();
 
-  const mentionedItems = use$(() => {
+  return use$(() => {
+    if (!rootId) return undefined;
     return store
       .timeline([
         {
@@ -105,17 +105,18 @@ export function MentionedNip34Items({ rootId }: MentionedNip34ItemsProps) {
               return true;
             })
             .sort(
-              (a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id),
+              (a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id),
             ),
         ),
       );
   }, [rootId, store]);
+}
 
-  if (!mentionedItems || mentionedItems.length === 0) return null;
-
+/** A related-discussion event styled as a distinct top-level timeline entry. */
+export function MentionedNip34Item({ event }: { event: NostrEvent }) {
   return (
     <section
-      aria-label="Related discussions that mention this item"
+      aria-label="Discussion that mentions this item"
       className="rounded-lg border border-dashed border-primary/35 bg-primary/5 px-3 py-2.5"
     >
       <div className="flex items-start gap-2 text-sm">
@@ -125,9 +126,7 @@ export function MentionedNip34Items({ rootId }: MentionedNip34ItemsProps) {
         </div>
       </div>
       <div className="mt-2 space-y-1">
-        {mentionedItems.map((event) => (
-          <MentionedItem key={event.id} event={event} />
-        ))}
+        <MentionedItemPreview event={event} />
       </div>
     </section>
   );

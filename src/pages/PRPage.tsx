@@ -21,7 +21,10 @@ import {
   ZapMessageCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
-import { MentionedNip34Items } from "@/components/MentionedNip34Items";
+import {
+  MentionedNip34Item,
+  useMentionedNip34Items,
+} from "@/components/MentionedNip34Items";
 
 import { useResolvedPR } from "@/hooks/useResolvedPR";
 import { EventSearchStatus } from "@/components/EventSearchStatus";
@@ -325,6 +328,21 @@ export default function PRPage() {
     extraSearchGroups,
     retryKey,
   );
+  const mentionedItems = useMentionedNip34Items(pr?.rootEvent.id);
+  const timelineEntries = useMemo(() => {
+    if (!pr) return [];
+    return [
+      ...pr.timelineNodes.map((node) => ({ type: "timeline" as const, node })),
+      ...(mentionedItems ?? []).map((event) => ({
+        type: "mention" as const,
+        event,
+      })),
+    ].sort(
+      (a, b) =>
+        (a.type === "mention" ? a.event.created_at : a.node.ts) -
+        (b.type === "mention" ? b.event.created_at : b.node.ts),
+    );
+  }, [pr, mentionedItems]);
 
   // Once this tab successfully pushes a merge, keep the merge panel mounted
   // until navigation. The newly published merged-status event flips pr.status
@@ -1366,13 +1384,11 @@ export default function PRPage() {
                   repoCoords={repoAllCoords ?? pr.repoCoords}
                 />
 
-                <MentionedNip34Items rootId={pr.rootEvent.id} />
-
                 {/* Interleaved timeline */}
                 <div className="space-y-1">
                   <Separator />
 
-                  {pr.timelineNodes.length === 0 ? (
+                  {timelineEntries.length === 0 ? (
                     <div className="py-8 text-center text-muted-foreground/60 text-sm">
                       No activity yet. The conversation awaits its first voice.
                     </div>
@@ -1389,7 +1405,16 @@ export default function PRPage() {
                         // (the root event's `c` tag) and advances with each update.
                         let previousPRTipCommitId: string | undefined =
                           originalPRTipCommitId;
-                        return pr.timelineNodes.map((node, idx) => {
+                        return timelineEntries.map((entry, idx) => {
+                          if (entry.type === "mention") {
+                            return (
+                              <MentionedNip34Item
+                                key={`mention-${entry.event.id}`}
+                                event={entry.event}
+                              />
+                            );
+                          }
+                          const { node } = entry;
                           if (node.type === "revision") {
                             if (
                               node.revision.type === "patch-set" &&
