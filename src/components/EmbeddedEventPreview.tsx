@@ -22,6 +22,7 @@ import type { NostrEvent } from "nostr-tools";
 import { nip19 } from "nostr-tools";
 import type { EventPointer, AddressPointer } from "nostr-tools/nip19";
 import { UserLink } from "@/components/UserAvatar";
+import { RepoBadge } from "@/components/RepoBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusIcon } from "@/components/StatusIcon";
 import { cn } from "@/lib/utils";
@@ -394,14 +395,7 @@ function CommentPreviewContent({ event }: { event: NostrEvent }) {
       <div className="min-w-0 space-y-0.5">
         <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
           <span className="text-muted-foreground/60">Comment on</span>
-          {repoId && (
-            <Link
-              to={repoPath}
-              className="font-mono text-muted-foreground/70 hover:underline"
-            >
-              {repoId}
-            </Link>
-          )}
+          {repoCoord && <RepoBadge coord={repoCoord} className="shrink-0" />}
           <span className="text-muted-foreground/60">{itemType}</span>
           <Link
             to={itemHref}
