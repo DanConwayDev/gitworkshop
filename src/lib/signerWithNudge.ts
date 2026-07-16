@@ -183,6 +183,7 @@ interface RunOpts {
   kind: number | undefined;
   opType: OpType;
   isBunkerConnected: (() => boolean) | undefined;
+  retryOnAndroidResume: boolean;
 }
 
 /** Creates a deferred promise. Used to race against the actual signer op. */
@@ -214,7 +215,7 @@ async function runWithNudge<T>(
   op: () => Promise<T>,
   opts: RunOpts,
 ): Promise<RunResult<T>> {
-  const { kind, opType, isBunkerConnected } = opts;
+  const { kind, opType, isBunkerConnected, retryOnAndroidResume } = opts;
 
   let nudgeFired = false;
   let afterForegroundResume = false;
@@ -246,13 +247,18 @@ async function runWithNudge<T>(
     );
 
     // --- Android foreground resume watcher ---
-    const { destroy: stopWatching } = androidResume({
-      threshold: 0,
-      onResume: () => {
-        toast({ title: "Checking for signer response\u2026", duration: 4000 });
-        resumeSignal.resolve(RESUME);
-      },
-    });
+    const stopWatching = retryOnAndroidResume
+      ? androidResume({
+          threshold: 0,
+          onResume: () => {
+            toast({
+              title: "Checking for signer response\u2026",
+              duration: 4000,
+            });
+            resumeSignal.resolve(RESUME);
+          },
+        }).destroy
+      : () => {};
 
     function cleanup() {
       clearTimeout(nudgeTimer);
@@ -330,11 +336,15 @@ async function runWithNudge<T>(
  * @param signer - The underlying ISigner to wrap.
  * @param isBunkerConnected - Optional callback checked at nudge time; when it
  *   returns false the toast warns about a relay connectivity problem instead.
+ * @param options - Set `retryOnAndroidResume` to false for direct Android
+ *   intent signers that complete their original request when the app resumes.
  */
 export function signerWithNudge(
   signer: ISigner,
   isBunkerConnected?: () => boolean,
+  options: { retryOnAndroidResume?: boolean } = {},
 ): ISigner {
+  const retryOnAndroidResume = options.retryOnAndroidResume ?? true;
   // Multi-phase state: set to true when a nip44 encrypt completes with the
   // nudge shown. Cleared on the next signEvent. Used to detect encrypt-then-sign
   // flows for kinds whose content is encrypted by the user's signer.
@@ -346,9 +356,12 @@ export function signerWithNudge(
     kind: number | undefined,
     opType: OpType,
   ): Promise<T> {
-    return runWithNudge(op, { kind, opType, isBunkerConnected }).then(
-      (r) => r.value,
-    );
+    return runWithNudge(op, {
+      kind,
+      opType,
+      isBunkerConnected,
+      retryOnAndroidResume,
+    }).then((r) => r.value);
   }
 
   const wrapped: ISigner = {
@@ -377,6 +390,7 @@ export function signerWithNudge(
           kind: undefined,
           opType: "encrypt",
           isBunkerConnected,
+          retryOnAndroidResume,
         }).then(({ value, nudgeFired }) => {
           pendingEncryptNudge = nudgeFired;
           return value;

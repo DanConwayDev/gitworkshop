@@ -57,13 +57,17 @@ export function applySignerNudge<T extends IAccount>(account: T): T {
         return typeof val === "function" ? val.bind(target) : val;
       },
     }) as typeof account.signer;
-  } else if (
-    account instanceof Accounts.ExtensionAccount ||
-    account instanceof Accounts.AmberClipboardAccount
-  ) {
-    // Extension and Amber signers benefit from the nudge (the user may dismiss
-    // or miss the approval prompt) but have no relay connectivity to check.
+  } else if (account instanceof Accounts.ExtensionAccount) {
+    // Extension signers benefit from the nudge (the user may dismiss or ignore
+    // the browser popup) but have no relay connectivity to check.
     account.signer = signerWithNudge(account.signer) as typeof account.signer;
+  } else if (account instanceof Accounts.AmberClipboardAccount) {
+    // Amber responds through the original Android intent when the app resumes.
+    // It needs the delayed nudge, but not NIP-46's resume retry, which would
+    // incorrectly issue a second intent.
+    account.signer = signerWithNudge(account.signer, undefined, {
+      retryOnAndroidResume: false,
+    }) as typeof account.signer;
   }
   // PrivateKeyAccount: local signing is synchronous — no nudge needed.
   return account;
@@ -280,7 +284,9 @@ export function useLoginActions() {
         const signer = new AmberClipboardSigner();
         // The first NIP-55 request is also subject to the regular signer nudge
         // so users are prompted to return to Amber if it does not respond.
-        const pubkey = await signerWithNudge(signer).getPublicKey();
+        const pubkey = await signerWithNudge(signer, undefined, {
+          retryOnAndroidResume: false,
+        }).getPublicKey();
 
         // Only skip adding if this exact signer type is already present for
         // the selected public key; users can keep other signer types too.
