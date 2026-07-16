@@ -34,6 +34,7 @@ import {
   PATCH_KIND,
   PR_KIND,
   REPO_KIND,
+  COMMENT_KIND,
   STATUS_KINDS,
   DELETION_KIND,
   LABEL_KIND,
@@ -354,6 +355,88 @@ function GenericPreviewContent({ event }: { event: NostrEvent }) {
   );
 }
 
+/** The NIP-22 root pointer identifies the issue or PR a comment belongs to. */
+function getCommentRootId(event: NostrEvent): string | undefined {
+  return event.tags.find(([name]) => name === "E")?.[1];
+}
+
+function CommentPreviewContent({ event }: { event: NostrEvent }) {
+  const rootId = getCommentRootId(event);
+  const rootEvent = useEmbeddedEventById(rootId ? { id: rootId } : undefined);
+  const repoCoord = rootEvent?.tags.find(([name]) => name === "a")?.[1];
+  const [, repoPubkey, repoId] = repoCoord?.split(":") ?? [];
+  const repoPath = useRepoPath(repoPubkey ?? "", repoId ?? "", []);
+
+  // Keep the generic preview for standalone comments and comments whose root is
+  // not an issue or PR. A NIP-22 comment can target any Nostr event kind.
+  if (
+    !rootEvent ||
+    ![ISSUE_KIND, PATCH_KIND, PR_KIND].includes(rootEvent.kind)
+  ) {
+    return <GenericPreviewContent event={event} />;
+  }
+
+  const itemType = rootEvent.kind === ISSUE_KIND ? "issue" : "pull request";
+  const subject = extractSubject(rootEvent);
+  const rootNevent = eventIdToNevent(rootEvent.id);
+  const itemHref = repoCoord
+    ? `${repoPath}/${rootEvent.kind === ISSUE_KIND ? "issues" : "prs"}/${rootNevent}`
+    : `/${rootNevent}`;
+  const commentNevent = eventIdToNevent(event.id);
+  const commentHref = `/${commentNevent}`;
+  const snippet = event.content.split(/\r?\n/)[0]?.trim();
+  const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
+    addSuffix: true,
+  });
+
+  return (
+    <div className="flex items-start justify-between gap-2 py-1 px-0.5 text-sm">
+      <div className="min-w-0 space-y-0.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
+          <span className="text-muted-foreground/60">Comment on</span>
+          {repoId && (
+            <Link
+              to={repoPath}
+              className="font-mono text-muted-foreground/70 hover:underline"
+            >
+              {repoId}
+            </Link>
+          )}
+          <span className="text-muted-foreground/60">{itemType}</span>
+          <Link
+            to={itemHref}
+            className="min-w-0 truncate font-medium text-foreground hover:underline"
+          >
+            {subject}
+          </Link>
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5">
+          {snippet && (
+            <Link
+              to={commentHref}
+              className="min-w-0 truncate text-foreground/80 hover:underline"
+            >
+              {snippet}
+            </Link>
+          )}
+          <span className="text-muted-foreground/60">by</span>
+          <UserLink
+            pubkey={event.pubkey}
+            avatarSize="xs"
+            nameClassName="text-xs"
+          />
+        </div>
+      </div>
+      <Link
+        to={commentHref}
+        className="shrink-0 whitespace-nowrap text-xs text-muted-foreground/50 hover:underline"
+      >
+        {timeAgo}
+      </Link>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Dispatcher — picks the right preview based on event kind
 // ---------------------------------------------------------------------------
@@ -380,6 +463,9 @@ function EventPreviewDispatcher({
   }
   if (event.kind === REPO_KIND) {
     return <RepoPreviewContent event={event} />;
+  }
+  if (event.kind === COMMENT_KIND) {
+    return <CommentPreviewContent event={event} />;
   }
   return <GenericPreviewContent event={event} />;
 }
