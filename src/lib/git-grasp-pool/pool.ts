@@ -734,6 +734,21 @@ export class GitGraspPool {
     this.runFetch();
   }
 
+  /**
+   * Discard advertised-ref snapshots and immediately re-check the git servers.
+   *
+   * A successful push changes refs outside the normal cache TTL. Refreshing at
+   * that mutation boundary prevents a newly published Nostr state from being
+   * compared against the pre-push advertisement while navigation moves to the
+   * Code view.
+   */
+  private refreshAdvertisedRefs(): void {
+    for (const url of this.urlManager.getLiveUrls()) {
+      this.cache.invalidateInfoRefs(url);
+    }
+    this.startFetch();
+  }
+
   private async runFetch(): Promise<void> {
     const allUrls = this.urlManager.getLiveUrls();
     if (allUrls.length === 0) {
@@ -1643,7 +1658,7 @@ export class GitGraspPool {
       signal?: AbortSignal;
     },
   ): Promise<PushDeliverySummary> {
-    return pushRefUpdateToGraspServers({
+    const summary = await pushRefUpdateToGraspServers({
       cloneUrls: options.targetCloneUrls,
       objects,
       refUpdate,
@@ -1687,6 +1702,13 @@ export class GitGraspPool {
         return fetchedObjects;
       },
     });
+
+    // The server-side refs have just changed, but info/refs is cached by the
+    // pool. Revalidate immediately rather than waiting for the state-event
+    // backoff poll (or a full page reload) to notice this merge.
+    this.refreshAdvertisedRefs();
+
+    return summary;
   }
 
   /**
