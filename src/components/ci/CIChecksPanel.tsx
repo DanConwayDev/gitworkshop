@@ -230,9 +230,11 @@ function WorkflowConclusion({ run }: { run: CIWorkflowRun }) {
 function WorkflowTimingDetails({
   run,
   nowSeconds,
+  canRetry = false,
 }: {
   run: CIWorkflowRun;
   nowSeconds: number;
+  canRetry?: boolean;
 }) {
   const { queuedAt, startedAt, completedAt, queuePosition } =
     getWorkflowTiming(run);
@@ -252,7 +254,8 @@ function WorkflowTimingDetails({
   if (
     queuedAt === undefined &&
     startedAt === undefined &&
-    executionDuration === null
+    executionDuration === null &&
+    !canRetry
   ) {
     return null;
   }
@@ -281,7 +284,12 @@ function WorkflowTimingDetails({
           <TimingConnector duration={executionDuration} />
         )}
       </div>
-      <WorkflowConclusion run={run} />
+      <div className="flex shrink-0 items-center gap-1">
+        <WorkflowConclusion run={run} />
+        {canRetry && run.workflowResult && (
+          <ManualRetryButton workflowResult={run.workflowResult.event} />
+        )}
+      </div>
     </div>
   );
 }
@@ -460,7 +468,13 @@ export function CIRunRow({
 
         <CollapsibleContent>
           <div className="space-y-2 pb-3 pl-10 pr-4">
-            <WorkflowTimingDetails run={run} nowSeconds={nowSeconds} />
+            <WorkflowTimingDetails
+              run={run}
+              nowSeconds={nowSeconds}
+              canRetry={
+                canRetry && !!run.workflowResult && run.status !== "pending"
+              }
+            />
             {(run.runner || run.platform) && (
               <div className="text-[11px] text-muted-foreground">
                 {[run.runner, run.platform].filter(Boolean).join(" · ")}
@@ -472,9 +486,6 @@ export function CIRunRow({
                 Workflow {formatPendingRunStatus(run.pendingRun, nowSeconds)}
                 <EventCardActions event={run.pendingRun.event} />
               </div>
-            )}
-            {canRetry && run.workflowResult && run.status !== "pending" && (
-              <ManualRetryButton workflowResult={run.workflowResult.event} />
             )}
             {run.jobs.map((job) => (
               <CIJobRow key={job.jobId} job={job} />
@@ -526,9 +537,9 @@ function ManualRetryButton({ workflowResult }: { workflowResult: NostrEvent }) {
   return (
     <Button
       type="button"
-      variant="outline"
+      variant="ghost"
       size="sm"
-      className="gap-1.5"
+      className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
       disabled={isRetrying}
       onClick={retry}
     >
