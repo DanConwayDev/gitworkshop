@@ -33,12 +33,20 @@ const BranchRefSymbol = Symbol.for("ci-branch-ref");
 const PRRootIdSymbol = Symbol.for("ci-pr-root-id");
 const TriggerEventIdSymbol = Symbol.for("ci-trigger-event-id");
 const JobRefsSymbol = Symbol.for("ci-job-refs");
+const ManualTriggerRefSymbol = Symbol.for("ci-manual-trigger-ref");
 
 export interface CIJobRef {
   eventId: string;
   relay: string | undefined;
   pubkey: string | undefined;
   jobId: string | undefined;
+}
+
+/** NIP-18 quote identifying the maintainer request for a manual CI replay. */
+export interface CIManualTriggerRef {
+  eventId: string;
+  relay: string | undefined;
+  pubkey: string | undefined;
 }
 
 export abstract class CIContextCast<
@@ -140,5 +148,24 @@ export abstract class CIContextCast<
           jobId,
         })),
     );
+  }
+
+  /**
+   * The Manual Trigger request that authorized this replay, when present.
+   *
+   * ngit-ci marks this NIP-18 quote with `manual-trigger`, which distinguishes
+   * it from the event's job-result `q` tags.
+   */
+  get manualTriggerRef(): CIManualTriggerRef | undefined {
+    return getOrComputeCachedValue(this.event, ManualTriggerRefSymbol, () => {
+      const tag = this.event.tags.find(
+        ([name, eventId, , , marker]) =>
+          name === "q" && !!eventId && marker === "manual-trigger",
+      );
+      if (!tag) return undefined;
+
+      const [, eventId, relay, pubkey] = tag;
+      return { eventId, relay, pubkey };
+    });
   }
 }

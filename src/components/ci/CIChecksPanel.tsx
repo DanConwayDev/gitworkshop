@@ -20,6 +20,8 @@ import {
 } from "react";
 import type { NostrEvent } from "nostr-tools";
 import { formatDistanceToNow } from "date-fns";
+import { EMPTY } from "rxjs";
+import { catchError } from "rxjs/operators";
 import {
   AlertCircle,
   Check,
@@ -51,11 +53,19 @@ import {
   type CIWorkflowRun,
 } from "@/lib/ci";
 import type { CIRun } from "@/casts/CIRun";
+import type { CIManualTriggerRef } from "@/casts/CIContext";
 import type { PRCIChecks } from "@/hooks/useCI";
 import { runner } from "@/services/actions";
 import { TriggerManualCI } from "@/actions/nip34";
 import { useToast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
+import { use$ } from "@/hooks/use$";
+import { useEventStore } from "@/hooks/useEventStore";
+import { resilientRequest } from "@/lib/resilientSubscription";
+import { CI_MANUAL_TRIGGER_KIND } from "@/lib/ci";
+import { pool } from "@/services/nostr";
+import { mapEventsToStore } from "applesauce-core";
+import { onlyEvents } from "applesauce-relay";
 
 interface CIChecksPanelProps {
   checks: PRCIChecks;
@@ -180,12 +190,51 @@ function formatCompletedRunStatus(run: CIWorkflowRun): string {
   return `${status} ${formatDistanceToNow(new Date(run.createdAt * 1000), { addSuffix: true })}`;
 }
 
-function TimingPhase({ label, detail }: { label: string; detail: string }) {
+function TimingPhase({ label, detail }: { label: string; detail: ReactNode }) {
   return (
     <div className="shrink-0 rounded-md bg-muted/50 px-2 py-1 text-center">
       <div className="font-medium leading-tight text-foreground">{label}</div>
       <div className="text-[11px] text-muted-foreground">{detail}</div>
     </div>
+  );
+}
+
+/** Load the manual-trigger request quoted by a manual workflow result. */
+function useManualTriggerEvent(
+  manualTriggerRef: CIManualTriggerRef | undefined,
+): NostrEvent | undefined {
+  const store = useEventStore();
+  const eventId = manualTriggerRef?.eventId;
+  const relay = manualTriggerRef?.relay;
+  const pubkey = manualTriggerRef?.pubkey;
+
+  use$(() => {
+    if (!eventId || !relay || !pubkey) return undefined;
+    return resilientRequest(
+      pool,
+      [relay],
+      [
+        {
+          ids: [eventId],
+          kinds: [CI_MANUAL_TRIGGER_KIND],
+          authors: [pubkey],
+        },
+      ],
+    ).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+      catchError(() => EMPTY),
+    );
+  }, [eventId, pubkey, relay, store]);
+
+  return use$(
+    () =>
+      eventId
+        ? (store.event(eventId) as import("rxjs").Observable<
+            NostrEvent | undefined
+          >)
+        : undefined,
+    [eventId, store],
   );
 }
 
@@ -250,11 +299,15 @@ function WorkflowTimingDetails({
   const executionDuration = formatCIDuration(
     startedAt === undefined ? undefined : executionEnd - startedAt,
   );
+  const manualTriggerEvent = useManualTriggerEvent(
+    run.workflowResult?.manualTriggerRef ?? run.pendingRun?.manualTriggerRef,
+  );
 
   if (
     queuedAt === undefined &&
     startedAt === undefined &&
     executionDuration === null &&
+    !manualTriggerEvent &&
     !canRetry
   ) {
     return null;
@@ -263,6 +316,31 @@ function WorkflowTimingDetails({
   return (
     <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 py-1 text-xs">
       <div className="flex items-center gap-2">
+        {manualTriggerEvent && (
+          <>
+            <TimingPhase
+              label="Manually triggered"
+              detail={
+                <span className="flex items-center justify-center gap-1">
+                  <UserLink
+                    pubkey={manualTriggerEvent.pubkey}
+                    avatarSize="xs"
+                    nameClassName="max-w-20 truncate text-[11px]"
+                  />
+                  <span>
+                    {formatDistanceToNow(
+                      new Date(manualTriggerEvent.created_at * 1000),
+                      { addSuffix: true },
+                    )}
+                  </span>
+                </span>
+              }
+            />
+            {(hasQueuePhase || startedAt !== undefined) && (
+              <TimingConnector duration={null} />
+            )}
+          </>
+        )}
         {hasQueuePhase && queuedAt !== undefined && (
           <TimingPhase
             label="Queued"
