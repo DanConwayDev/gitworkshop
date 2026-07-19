@@ -1567,7 +1567,7 @@ export default function PRPage() {
                 {/* CI checks — shown to everyone whenever any CI runner has
                     published workflow runs/results for this PR */}
                 {pr && ciChecks && ciChecks.runs.length > 0 && (
-                  <CIChecksPanel checks={ciChecks} />
+                  <CIChecksPanel checks={ciChecks} canRetry={isMaintainer} />
                 )}
 
                 {/* Merge panel — shown for PRs and patches on git-backed repos, for maintainers */}

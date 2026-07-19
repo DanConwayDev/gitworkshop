@@ -18,6 +18,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { NostrEvent } from "nostr-tools";
 import { formatDistanceToNow } from "date-fns";
 import {
   AlertCircle,
@@ -28,6 +29,7 @@ import {
   FileText,
   GitBranch,
   Loader2,
+  RotateCcw,
   Tag,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,9 +52,15 @@ import {
 } from "@/lib/ci";
 import type { CIRun } from "@/casts/CIRun";
 import type { PRCIChecks } from "@/hooks/useCI";
+import { runner } from "@/services/actions";
+import { TriggerManualCI } from "@/actions/nip34";
+import { useToast } from "@/hooks/useToast";
+import { Button } from "@/components/ui/button";
 
 interface CIChecksPanelProps {
   checks: PRCIChecks;
+  /** Whether the active account is a confirmed repository maintainer. */
+  canRetry?: boolean;
   className?: string;
 }
 
@@ -312,7 +320,11 @@ export function CITriggerRefBadge({
   );
 }
 
-export function CIChecksPanel({ checks, className }: CIChecksPanelProps) {
+export function CIChecksPanel({
+  checks,
+  canRetry = false,
+  className,
+}: CIChecksPanelProps) {
   const { currentRuns, olderRuns } = checks;
   if (checks.runs.length === 0) return null;
 
@@ -343,6 +355,7 @@ export function CIChecksPanel({ checks, className }: CIChecksPanelProps) {
               <CIRunRow
                 key={run.key}
                 run={run}
+                canRetry={canRetry}
                 defaultOpen={
                   currentRuns.length === 1 &&
                   (run.status === "failure" ||
@@ -364,7 +377,7 @@ export function CIChecksPanel({ checks, className }: CIChecksPanelProps) {
             <CollapsibleContent>
               <ul className="divide-y divide-border/60 border-t border-border/60 opacity-80">
                 {olderRuns.map((run) => (
-                  <CIRunRow key={run.key} run={run} />
+                  <CIRunRow key={run.key} run={run} canRetry={canRetry} />
                 ))}
               </ul>
             </CollapsibleContent>
@@ -378,10 +391,13 @@ export function CIChecksPanel({ checks, className }: CIChecksPanelProps) {
 export function CIRunRow({
   run,
   defaultOpen = false,
+  canRetry = false,
   triggerContext,
 }: {
   run: CIWorkflowRun;
   defaultOpen?: boolean;
+  /** Whether the active account is a confirmed repository maintainer. */
+  canRetry?: boolean;
   /**
    * Optional trigger context element (branch name, PR link) shown on the
    * right of the row — used by the repo Actions tab.
@@ -457,6 +473,9 @@ export function CIRunRow({
                 <EventCardActions event={run.pendingRun.event} />
               </div>
             )}
+            {canRetry && run.workflowResult && run.status !== "pending" && (
+              <ManualRetryButton workflowResult={run.workflowResult.event} />
+            )}
             {run.jobs.map((job) => (
               <CIJobRow key={job.jobId} job={job} />
             ))}
@@ -474,6 +493,52 @@ export function CIRunRow({
         </CollapsibleContent>
       </Collapsible>
     </li>
+  );
+}
+
+function ManualRetryButton({ workflowResult }: { workflowResult: NostrEvent }) {
+  const { toast } = useToast();
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const retry = useCallback(async () => {
+    setIsRetrying(true);
+    try {
+      await runner.run(TriggerManualCI, workflowResult);
+      toast({
+        title: "Workflow retry requested",
+        description:
+          "The CI coordinator has been asked to run this workflow again.",
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to request workflow retry",
+        description:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [toast, workflowResult]);
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="gap-1.5"
+      disabled={isRetrying}
+      onClick={retry}
+    >
+      {isRetrying ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <RotateCcw className="h-3.5 w-3.5" />
+      )}
+      Retry workflow
+    </Button>
   );
 }
 

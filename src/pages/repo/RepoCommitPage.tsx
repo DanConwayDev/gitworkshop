@@ -9,11 +9,15 @@ import { useCIForCommit } from "@/hooks/useCI";
 import { CIChecksPanel } from "@/components/ci/CIChecksPanel";
 import { isNonHttpUrl } from "@/lib/git-grasp-pool";
 import { IncompatibleProtocolError } from "@/components/IncompatibleProtocolError";
+import { useActiveAccount } from "applesauce-react/hooks";
 
 export default function RepoCommitPage() {
   const { cloneUrls, commitId, resolved, pubkey, repoId, basePath } =
     useRepoContext();
   const repo = resolved?.repo;
+  const account = useActiveAccount();
+  const isMaintainer =
+    !!account && !!repo?.maintainerSet.includes(account.pubkey);
   const repoOwnerProfile = useProfile(pubkey);
 
   useSeoMeta({
@@ -78,6 +82,7 @@ export default function RepoCommitPage() {
                 olderRuns: [],
                 status: ci.status,
               }}
+              canRetry={isMaintainer}
             />
           ) : undefined
         }

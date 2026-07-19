@@ -29,12 +29,16 @@ import {
 } from "@/components/ui/select";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import type { CIWorkflowRun } from "@/lib/ci";
+import { useActiveAccount } from "applesauce-react/hooks";
 
 const ALL = "__all__";
 
 export default function RepoActionsPage() {
   const { resolved, basePath } = useRepoContext();
   const repo = resolved?.repo;
+  const account = useActiveAccount();
+  const isMaintainer =
+    !!account && !!repo?.maintainerSet.includes(account.pubkey);
 
   const runs = useRepoCI(repo?.allCoordinates, resolved?.repoRelayGroup);
 
@@ -156,6 +160,7 @@ export default function RepoActionsPage() {
               <CIRunRow
                 key={run.key}
                 run={run}
+                canRetry={isMaintainer}
                 triggerContext={
                   <RunTriggerContext
                     run={run}

@@ -1,5 +1,5 @@
 /**
- * ngit-ci CI workflow events (experimental kinds 9841 / 9842 / 39842).
+ * ngit-ci CI workflow events (experimental kinds 9840 / 9841 / 9842 / 39842).
  *
  * Kind 9841 — "CI Job Result": one job's result, signed by the compute
  * provider. Content is a small log tail, with the full log in a `logs` tag.
@@ -34,6 +34,9 @@
 import type { CIRun } from "@/casts/CIRun";
 import type { CIJobResultEvent } from "@/casts/CIJobResult";
 import type { CIResult } from "@/casts/CIResult";
+
+/** Kind 9840 — maintainer-requested manual CI workflow trigger. */
+export const CI_MANUAL_TRIGGER_KIND = 9840;
 
 /** Kind 9841 — CI job result. */
 export const CI_JOB_RESULT_KIND = 9841;

@@ -383,10 +383,11 @@ Cover notes reference the root via **lowercase** NIP-10 `#e` (not the uppercase 
 
 ---
 
-## CI Workflow Events (kinds 9841, 9842, and 39842) — consumed
+## CI Workflow Events (kinds 9840, 9841, 9842, and 39842) — consumed
 
 This project **consumes** (does not define) the experimental CI events published by [`ngit-ci`](https://github.com/DanConwayDev/ngit-ci) for NIP-34 repositories. The authoritative event shapes are defined in [ngit-ci's working Nostr CI NIP](https://gitworkshop.dev/npub15qydau2hjma6ngxkl2cyar74wzyjshvl65za5k5rl69264ar2exs5cyejr/ngit-ci/tree/master/NIP.md), which is implemented but has not yet been merged into the upstream NIPs repository. ngit-ci is working with Hive-CI to achieve consensus around a shared CI standard; this is the working NIP for that effort. This section documents the subset gitworkshop relies on and how it fetches and interprets it.
 
+- **Kind 9840 — Manual Trigger**: a maintainer-signed request for a coordinator to run a selected workflow again. It targets the coordinator with a `p` tag and copies the source workflow's repository and trigger context, omitting `o` because its normalized trigger is always `manual`. gitworkshop exposes this only to confirmed repository maintainers; coordinators independently verify that authorization before scheduling work.
 - **Kind 9841 — Job Result**: an attestation of an individual job outcome, signed by the compute provider that ran it. `content` holds a small log tail; the full log is referenced with a `logs` tag.
 - **Kind 9842 — Workflow Result**: the coordinator-signed combined outcome of a workflow run, with `q` tags that reference its Job Results.
 - **Kind 39842 — Workflow Progress** (optional): an addressable, NIP-40-expiring marker for a queued, in-progress, or recently concluded workflow run.

@@ -41,6 +41,7 @@ import {
   InlineCommentFactory,
   type InlineCommentLocation,
 } from "@/factories/InlineCommentFactory";
+import { CIManualTriggerFactory } from "@/factories/CIManualTriggerFactory";
 
 import type { IssueStatus } from "@/lib/nip34";
 import { outboxStore } from "@/services/outbox";
@@ -160,6 +161,30 @@ export function ChangeIssueStatus(
     // Fire-and-forget: publishing to the outbox can continue in the background.
     outboxStore
       .publish(signed, buildGroupIds(self, repoCoords, notifyPubkeys))
+      .catch(console.error);
+  };
+}
+
+/**
+ * Ask the coordinator of a completed CI workflow result to run it again.
+ *
+ * Authorization is enforced by the coordinator against the resolved repository
+ * maintainer set. The UI only exposes this action to confirmed maintainers.
+ */
+export function TriggerManualCI(workflowResult: NostrEvent): Action {
+  return async ({ signer, self }) => {
+    const coordinatorPubkey = workflowResult.pubkey;
+    const repoCoords = workflowResult.tags
+      .filter(([name, value]) => name === "a" && !!value)
+      .map(([, value]) => value);
+    const signed = await CIManualTriggerFactory.create(
+      workflowResult,
+      coordinatorPubkey,
+    ).sign(signer);
+
+    eventStore.add(signed);
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords, [coordinatorPubkey]))
       .catch(console.error);
   };
 }
