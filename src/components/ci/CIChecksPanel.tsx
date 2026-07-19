@@ -190,9 +190,22 @@ function formatCompletedRunStatus(run: CIWorkflowRun): string {
   return `${status} ${formatDistanceToNow(new Date(run.createdAt * 1000), { addSuffix: true })}`;
 }
 
-function TimingPhase({ label, detail }: { label: string; detail: ReactNode }) {
+function TimingPhase({
+  label,
+  detail,
+  className,
+}: {
+  label: string;
+  detail: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="shrink-0 rounded-md bg-muted/50 px-2 py-1 text-center">
+    <div
+      className={cn(
+        "shrink-0 rounded-md bg-muted/50 px-2 py-1 text-center",
+        className,
+      )}
+    >
       <div className="font-medium leading-tight text-foreground">{label}</div>
       <div className="text-[11px] text-muted-foreground">{detail}</div>
     </div>
@@ -325,7 +338,8 @@ function WorkflowTimingDetails({
         {manualTriggerEvent && (
           <>
             <TimingPhase
-              label="Manually triggered"
+              label="Triggered By"
+              className="px-3 py-1.5"
               detail={
                 <span className="flex flex-col items-center">
                   <UserLink
