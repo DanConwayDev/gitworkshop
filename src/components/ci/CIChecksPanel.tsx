@@ -302,6 +302,12 @@ function WorkflowTimingDetails({
   const manualTriggerEvent = useManualTriggerEvent(
     run.workflowResult?.manualTriggerRef ?? run.pendingRun?.manualTriggerRef,
   );
+  const manualTriggerDuration = formatCIDuration(
+    manualTriggerEvent
+      ? (queuedAt ?? startedAt ?? manualTriggerEvent.created_at) -
+          manualTriggerEvent.created_at
+      : undefined,
+  );
 
   if (
     queuedAt === undefined &&
@@ -321,7 +327,7 @@ function WorkflowTimingDetails({
             <TimingPhase
               label="Manually triggered"
               detail={
-                <span className="flex items-center justify-center gap-1">
+                <span className="flex flex-col items-center">
                   <UserLink
                     pubkey={manualTriggerEvent.pubkey}
                     avatarSize="xs"
@@ -337,7 +343,7 @@ function WorkflowTimingDetails({
               }
             />
             {(hasQueuePhase || startedAt !== undefined) && (
-              <TimingConnector duration={null} />
+              <TimingConnector duration={manualTriggerDuration} />
             )}
           </>
         )}
