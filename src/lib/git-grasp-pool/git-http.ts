@@ -610,12 +610,19 @@ export class GitHttpClient {
     })();
 
     this.inFlightInfoRefs.set(url, fetchPromise);
-    fetchPromise.finally(() => this.inFlightInfoRefs.delete(url));
-
-    return fetchPromise.then((info) => {
-      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-      return info;
-    });
+    // Chain cleanup to the returned promise so a rejection of `fetchPromise`
+    // has a handler even if the caller aborts and stops awaiting the return
+    // value. Previously this was a bare `fetchPromise.finally(...)` whose
+    // implicit rejection had no `.catch`, which triggered
+    // `unhandledRejection` in Node when e.g. a test tore down its git server
+    // mid-flight (see e2e — lagging Grasp mirror merge fan-out > keeps the
+    // merge successful when B is down and records B's failure).
+    return fetchPromise
+      .then((info) => {
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+        return info;
+      })
+      .finally(() => this.inFlightInfoRefs.delete(url));
   }
 
   // -----------------------------------------------------------------------
