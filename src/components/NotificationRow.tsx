@@ -178,9 +178,21 @@ function UnreadSummaryBadge({
   );
 }
 
-function RootPurposeBadge({ purpose }: { purpose: string }) {
+function RootPurposeBadge({
+  purpose,
+  isUnread,
+}: {
+  purpose: string;
+  isUnread: boolean;
+}) {
   return (
-    <Badge className="h-5 bg-pink-600 px-1.5 text-[11px] font-semibold capitalize hover:bg-pink-600">
+    <Badge
+      variant={isUnread ? "default" : "secondary"}
+      className={cn(
+        "h-5 px-1.5 text-[11px] font-semibold capitalize",
+        isUnread && "bg-pink-600 hover:bg-pink-600",
+      )}
+    >
       {purpose}
     </Badge>
   );
@@ -342,7 +354,10 @@ function ThreadNotificationRow({
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {summary.purpose &&
                 (isNewRoot ? (
-                  <RootPurposeBadge purpose={summary.purpose} />
+                  <RootPurposeBadge
+                    purpose={summary.purpose}
+                    isUnread={item.unread}
+                  />
                 ) : (
                   <span className="text-xs text-muted-foreground">
                     {summary.purpose}
