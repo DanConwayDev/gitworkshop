@@ -26,6 +26,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { RepoBadge } from "@/components/RepoBadge";
@@ -169,12 +170,41 @@ function UnreadSummaryBadge({
       : "text-muted-foreground";
 
   return (
-    <span
-      className={`inline-flex items-center gap-0.5 text-xs ${isUnread ? "text-pink-600 dark:text-pink-400 font-medium" : "text-muted-foreground"}`}
+    <Badge
+      variant={isUnread ? "default" : "secondary"}
+      className={cn(
+        "h-5 gap-1 px-1.5 text-[11px] font-semibold",
+        isUnread && "bg-pink-600 hover:bg-pink-600",
+      )}
     >
-      <Icon className={`h-3 w-3 ${iconColor}`} />
+      <Icon
+        className={cn(
+          "h-3 w-3",
+          isUnread ? "text-primary-foreground" : iconColor,
+        )}
+      />
       {summary}
-    </span>
+    </Badge>
+  );
+}
+
+function RootPurposeBadge({
+  purpose,
+  isUnread,
+}: {
+  purpose: string;
+  isUnread: boolean;
+}) {
+  return (
+    <Badge
+      variant={isUnread ? "default" : "secondary"}
+      className={cn(
+        "h-5 px-1.5 text-[11px] font-semibold capitalize",
+        isUnread && "bg-pink-600 hover:bg-pink-600",
+      )}
+    >
+      {purpose}
+    </Badge>
   );
 }
 
@@ -206,6 +236,9 @@ function ThreadNotificationRow({
     ? repoOwnerPubkey(repoCoord) === activeAccount?.pubkey
     : false;
   const summary = buildNotificationSummary(item);
+  const isNewRoot = ["new issue", "new PR", "new patch"].includes(
+    summary.purpose ?? "",
+  );
   const nevent = eventIdToNevent(item.rootId);
   const linkPath = buildNotificationLink(nevent, item);
 
@@ -268,68 +301,59 @@ function ThreadNotificationRow({
               {title.length > 70 ? `${title.slice(0, 67)}...` : title}
             </p>
 
-            {/* Sub-row: timestamp · purpose · unread text · repo badge */}
+            {/* Latest activity author + root/unread state */}
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="text-xs text-muted-foreground shrink-0">
-                active {lastActive}
-              </span>
-              {summary.purpose && (
-                <>
-                  <span className="text-muted-foreground/40 text-xs">
-                    &middot;
-                  </span>
+              {commenters[0] && (
+                <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-muted/70 py-0.5 pl-0.5 pr-2 text-xs font-medium text-foreground">
+                  <UserAvatar
+                    pubkey={commenters[0]}
+                    size="sm"
+                    className="h-5 w-5 text-[8px]"
+                    noHoverCard
+                  />
+                  <UserName pubkey={commenters[0]} className="truncate" />
+                  {commenters.length > 1 && (
+                    <span className="text-muted-foreground">
+                      +{commenters.length - 1}
+                    </span>
+                  )}
+                </span>
+              )}
+              {summary.purpose &&
+                (isNewRoot ? (
+                  <RootPurposeBadge
+                    purpose={summary.purpose}
+                    isUnread={item.unread}
+                  />
+                ) : (
                   <span className="text-xs text-muted-foreground">
                     {summary.purpose}
                   </span>
-                </>
-              )}
+                ))}
               {summary.unreadText && (
-                <>
-                  <span className="text-muted-foreground/40 text-xs">
-                    &middot;
-                  </span>
-                  <UnreadSummaryBadge
-                    summary={summary.unreadText}
-                    hasMerge={summary.hasMerge}
-                    hasClosed={summary.hasClosed}
-                    isUnread={item.unread}
-                  />
-                </>
-              )}
-              {repoCoord && (
-                <>
-                  <span className="text-muted-foreground/40 text-xs">
-                    &middot;
-                  </span>
-                  <RepoBadge
-                    coord={repoCoord}
-                    repoNameOnly={isOwnRepository}
-                    asSpan
-                  />
-                </>
+                <UnreadSummaryBadge
+                  summary={summary.unreadText}
+                  hasMerge={summary.hasMerge}
+                  hasClosed={summary.hasClosed}
+                  isUnread={item.unread}
+                />
               )}
             </div>
           </div>
 
-          {/* Commenter avatars — hidden on hover, hidden in compact */}
-          {!compact && (
-            <div className="hidden md:flex items-center gap-1 self-center shrink-0 group-hover:hidden">
-              {commenters.slice(0, 3).map((pk) => (
-                <UserAvatar
-                  key={pk}
-                  pubkey={pk}
-                  size="sm"
-                  className="h-5 w-5 text-[8px] opacity-60"
-                  noHoverCard
-                />
-              ))}
-              {commenters.length > 3 && (
-                <span className="text-[10px] text-muted-foreground/60">
-                  +{commenters.length - 3}
-                </span>
-              )}
-            </div>
-          )}
+          {/* Root context occupies the former activity-avatar position. */}
+          <div className="hidden items-center gap-2 self-center shrink-0 text-right md:flex group-hover:hidden">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              active {lastActive}
+            </span>
+            {repoCoord && (
+              <RepoBadge
+                coord={repoCoord}
+                repoNameOnly={isOwnRepository}
+                asSpan
+              />
+            )}
+          </div>
         </Link>
 
         {/* Action buttons — outside the link, visible on hover. Icon-only when compact. */}
