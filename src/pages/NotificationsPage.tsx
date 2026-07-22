@@ -177,7 +177,7 @@ export default function NotificationsPage() {
         {currentView === "inbox" &&
           filteredItems &&
           filteredItems.length > 0 && (
-            <>
+            <div className="ml-auto flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"
@@ -196,7 +196,7 @@ export default function NotificationsPage() {
                 <Archive className="h-3 w-3 mr-1" />
                 Archive all
               </Button>
-            </>
+            </div>
           )}
       </div>
 

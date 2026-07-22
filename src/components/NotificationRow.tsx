@@ -10,6 +10,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { nip19 } from "nostr-tools";
+import { useActiveAccount } from "applesauce-react/hooks";
 import {
   CircleDot,
   GitPullRequest,
@@ -691,7 +692,12 @@ function activityVerb(event: NostrEvent): string {
   if (event.kind === ISSUE_KIND) return "opened an issue";
   if (event.kind === PATCH_KIND) return "sent a patch";
   if (event.kind === PR_UPDATE_KIND) return "pushed an update to";
-  return "added activity to";
+  return "updated";
+}
+
+function repoOwnerPubkey(coord: string): string | undefined {
+  const [, pubkey] = coord.split(":");
+  return /^[0-9a-f]{64}$/.test(pubkey) ? pubkey : undefined;
 }
 
 /**
@@ -712,11 +718,15 @@ export function NotificationActivityRow({
   currentView: ViewTab;
   resolvedMap?: Map<string, ResolvedIssueLite>;
 }) {
+  const activeAccount = useActiveAccount();
   const rootEvent = useRootEvent(item.rootId);
   const resolved = resolvedMap?.get(item.rootId);
   const rootType = inferRootType(item);
   const title = resolved?.currentSubject ?? resolveTitle(rootEvent, item);
   const repoCoord = resolveRepoCoord(rootEvent, item);
+  const isOwnRepository = repoCoord
+    ? repoOwnerPubkey(repoCoord) === activeAccount?.pubkey
+    : false;
   const isUnread = item.unreadEventIds.includes(event.id);
   const lastActive = useRelativeTime(event.created_at);
   const nevent = eventIdToNevent(item.rootId);
@@ -749,28 +759,47 @@ export function NotificationActivityRow({
               <UserName pubkey={event.pubkey} />{" "}
               <span className="text-muted-foreground">
                 {activityVerb(event)}
+              </span>{" "}
+              <span
+                className={cn(
+                  isUnread
+                    ? "font-medium text-foreground"
+                    : "text-foreground/80",
+                )}
+              >
+                {title}
               </span>
-            </p>
-            <p
-              className={cn(
-                "line-clamp-1 text-sm",
-                isUnread ? "font-medium text-foreground" : "text-foreground/80",
-              )}
-            >
-              {title.length > 70 ? `${title.slice(0, 67)}...` : title}
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">
                 {lastActive}
               </span>
               <span className="text-xs text-muted-foreground/40">&middot;</span>
-              <RootTypeIcon type={rootType} compact={false} />
+              {resolved ? (
+                <StatusIcon
+                  status={resolved.status}
+                  variant={
+                    rootType === "patch"
+                      ? "patch"
+                      : rootType === "pr"
+                        ? "pr"
+                        : "issue"
+                  }
+                  className="h-4 w-4"
+                />
+              ) : (
+                <RootTypeIcon type={rootType} compact={false} />
+              )}
               {repoCoord && (
                 <>
                   <span className="text-xs text-muted-foreground/40">
                     &middot;
                   </span>
-                  <RepoBadge coord={repoCoord} repoNameOnly asSpan />
+                  <RepoBadge
+                    coord={repoCoord}
+                    repoNameOnly={isOwnRepository}
+                    asSpan
+                  />
                 </>
               )}
             </div>
