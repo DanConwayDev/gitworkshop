@@ -195,12 +195,16 @@ function ThreadNotificationRow({
   currentView: ViewTab;
   resolvedMap?: Map<string, ResolvedIssueLite>;
 }) {
+  const activeAccount = useActiveAccount();
   const rootEvent = useRootEvent(item.rootId);
 
   const resolved = resolvedMap?.get(item.rootId);
   const rootType = inferRootType(item);
   const title = resolved?.currentSubject ?? resolveTitle(rootEvent, item);
   const repoCoord = resolveRepoCoord(rootEvent, item);
+  const isOwnRepository = repoCoord
+    ? repoOwnerPubkey(repoCoord) === activeAccount?.pubkey
+    : false;
   const summary = buildNotificationSummary(item);
   const nevent = eventIdToNevent(item.rootId);
   const linkPath = buildNotificationLink(nevent, item);
@@ -297,7 +301,11 @@ function ThreadNotificationRow({
                   <span className="text-muted-foreground/40 text-xs">
                     &middot;
                   </span>
-                  <RepoBadge coord={repoCoord} asSpan />
+                  <RepoBadge
+                    coord={repoCoord}
+                    repoNameOnly={isOwnRepository}
+                    asSpan
+                  />
                 </>
               )}
             </div>
