@@ -155,12 +155,10 @@ function UnreadSummaryBadge({
   summary,
   hasMerge,
   hasClosed,
-  isUnread,
 }: {
   summary: string;
   hasMerge: boolean;
   hasClosed: boolean;
-  isUnread: boolean;
 }) {
   const Icon = hasMerge ? GitMerge : hasClosed ? XCircle : MessageCircle;
   const iconColor = hasMerge
@@ -171,40 +169,69 @@ function UnreadSummaryBadge({
 
   return (
     <Badge
-      variant={isUnread ? "default" : "secondary"}
-      className={cn(
-        "h-5 gap-1 px-1.5 text-[11px] font-semibold",
-        isUnread && "bg-pink-600 hover:bg-pink-600",
-      )}
+      variant="secondary"
+      className="h-5 gap-1 px-1.5 text-[11px] font-semibold"
     >
-      <Icon
-        className={cn(
-          "h-3 w-3",
-          isUnread ? "text-primary-foreground" : iconColor,
-        )}
-      />
+      <Icon className={cn("h-3 w-3", iconColor)} />
       {summary}
     </Badge>
   );
 }
 
-function RootPurposeBadge({
-  purpose,
-  isUnread,
-}: {
-  purpose: string;
-  isUnread: boolean;
-}) {
+function RootPurposeBadge({ purpose }: { purpose: string }) {
   return (
-    <Badge
-      variant={isUnread ? "default" : "secondary"}
-      className={cn(
-        "h-5 px-1.5 text-[11px] font-semibold capitalize",
-        isUnread && "bg-pink-600 hover:bg-pink-600",
-      )}
-    >
+    <Badge className="h-5 bg-pink-600 px-1.5 text-[11px] font-semibold capitalize hover:bg-pink-600">
       {purpose}
     </Badge>
+  );
+}
+
+function ActivityActors({ pubkeys }: { pubkeys: string[] }) {
+  if (pubkeys.length === 0) return null;
+
+  const name = (pubkey: string) => (
+    <UserName
+      key={pubkey}
+      pubkey={pubkey}
+      className="font-medium text-foreground"
+    />
+  );
+
+  if (pubkeys.length === 1) return name(pubkeys[0]);
+  if (pubkeys.length === 2) {
+    return (
+      <>
+        {name(pubkeys[0])} <span>and</span> {name(pubkeys[1])}
+      </>
+    );
+  }
+  if (pubkeys.length === 3) {
+    return (
+      <>
+        {name(pubkeys[0])}, {name(pubkeys[1])} <span>and</span>{" "}
+        {name(pubkeys[2])}
+      </>
+    );
+  }
+
+  const avatarPubkeys = pubkeys.slice(2, 6);
+  const remainingCount = pubkeys.length - avatarPubkeys.length - 2;
+  return (
+    <>
+      {name(pubkeys[0])}, {name(pubkeys[1])} <span>and</span>
+      <span className="inline-flex -space-x-1.5 align-middle">
+        {avatarPubkeys.map((pubkey) => (
+          <UserAvatar
+            key={pubkey}
+            pubkey={pubkey}
+            size="sm"
+            className="h-5 w-5 border border-background text-[8px]"
+            noHoverCard
+          />
+        ))}
+      </span>
+      {remainingCount > 0 && <span>+{remainingCount}</span>}
+    </>
   );
 }
 
@@ -303,49 +330,31 @@ function ThreadNotificationRow({
 
             {/* Latest activity author + root/unread state */}
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {commenters[0] && (
-                <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-muted/70 py-0.5 pl-0.5 pr-2 text-xs font-medium text-foreground">
-                  <UserAvatar
-                    pubkey={commenters[0]}
-                    size="sm"
-                    className="h-5 w-5 text-[8px]"
-                    noHoverCard
-                  />
-                  <UserName pubkey={commenters[0]} className="truncate" />
-                  {commenters.length > 1 && (
-                    <span className="text-muted-foreground">
-                      +{commenters.length - 1}
-                    </span>
-                  )}
-                </span>
-              )}
-              {summary.purpose &&
-                (isNewRoot ? (
-                  <RootPurposeBadge
-                    purpose={summary.purpose}
-                    isUnread={item.unread}
-                  />
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    {summary.purpose}
-                  </span>
-                ))}
               {summary.unreadText && (
                 <UnreadSummaryBadge
                   summary={summary.unreadText}
                   hasMerge={summary.hasMerge}
                   hasClosed={summary.hasClosed}
-                  isUnread={item.unread}
                 />
               )}
+              {commenters[0] && (
+                <span className="min-w-0 text-xs text-muted-foreground">
+                  by <ActivityActors pubkeys={commenters} />
+                </span>
+              )}
+              {summary.purpose &&
+                (isNewRoot ? (
+                  <RootPurposeBadge purpose={summary.purpose} />
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {summary.purpose}
+                  </span>
+                ))}
             </div>
           </div>
 
           {/* Root context occupies the former activity-avatar position. */}
-          <div className="hidden items-center gap-2 self-center shrink-0 text-right md:flex group-hover:hidden">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
-              active {lastActive}
-            </span>
+          <div className="hidden flex-col items-end gap-0.5 self-center shrink-0 text-right md:flex group-hover:hidden">
             {repoCoord && (
               <RepoBadge
                 coord={repoCoord}
@@ -353,6 +362,9 @@ function ThreadNotificationRow({
                 asSpan
               />
             )}
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              active {lastActive}
+            </span>
           </div>
         </Link>
 

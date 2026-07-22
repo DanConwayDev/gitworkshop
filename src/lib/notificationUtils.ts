@@ -250,7 +250,7 @@ export function getCommenters(item: NotificationItem): string[] {
   for (const ev of item.events) {
     pubkeys.add(ev.pubkey);
   }
-  return Array.from(pubkeys).slice(0, 5);
+  return Array.from(pubkeys);
 }
 
 export function getActorPubkeys(
