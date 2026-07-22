@@ -4,6 +4,7 @@ import { useSeoMeta } from "@unhead/react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
   Bell,
@@ -19,18 +20,29 @@ import {
 } from "lucide-react";
 import {
   NotificationRow,
+  NotificationActivityRow,
   NotificationSkeleton,
   type ViewTab,
 } from "@/components/NotificationRow";
 import { useNotificationPageEssentials } from "@/hooks/useNotificationPageEssentials";
+import type {
+  NotificationItem,
+  ThreadNotificationItem,
+} from "@/lib/notifications";
+import type { NostrEvent } from "nostr-tools";
 
 const ITEMS_PER_PAGE = 10;
+
+type NotificationDisplayEntry =
+  | { type: "item"; item: NotificationItem }
+  | { type: "activity"; item: ThreadNotificationItem; event: NostrEvent };
 
 export default function NotificationsPage() {
   const activeAccount = useActiveAccount();
   const { items, unreadCount, actions, history } = useNotifications();
   const [currentView, setCurrentView] = useState<ViewTab>("inbox");
   const [currentPage, setCurrentPage] = useState(1);
+  const [groupByRootItem, setGroupByRootItem] = useState(true);
 
   useSeoMeta({
     title:
@@ -57,24 +69,52 @@ export default function NotificationsPage() {
     }
   }, [items, currentView]);
 
+  const displayEntries = useMemo<NotificationDisplayEntry[] | undefined>(() => {
+    if (!filteredItems) return undefined;
+    if (groupByRootItem) {
+      return filteredItems.map((item) => ({ type: "item", item }));
+    }
+
+    return filteredItems.flatMap<NotificationDisplayEntry>((item) => {
+      // Repository stars and zaps are intrinsically repository-level
+      // notifications, so their existing grouping remains intact.
+      if (item.kind !== "thread") return [{ type: "item", item }];
+
+      const events =
+        currentView === "inbox"
+          ? item.events.filter((event) =>
+              item.unreadEventIds.includes(event.id),
+            )
+          : item.events;
+      return events.map((event) => ({ type: "activity", item, event }));
+    });
+  }, [currentView, filteredItems, groupByRootItem]);
+
   // Pagination — reset currentPage when the list shrinks past it (#10)
-  const totalPages = filteredItems
-    ? Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE))
+  const totalPages = displayEntries
+    ? Math.max(1, Math.ceil(displayEntries.length / ITEMS_PER_PAGE))
     : 1;
   const safePage = Math.min(currentPage, totalPages);
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
-  const pageItems = filteredItems?.slice(
+  const pageEntries = displayEntries?.slice(
     (safePage - 1) * ITEMS_PER_PAGE,
     safePage * ITEMS_PER_PAGE,
   );
 
-  const resolvedMap = useNotificationPageEssentials(pageItems ?? []);
+  const resolvedMap = useNotificationPageEssentials(
+    pageEntries?.map((entry) => entry.item) ?? [],
+  );
 
   // Reset page when switching tabs
   const handleTabChange = useCallback((tab: ViewTab) => {
     setCurrentView(tab);
+    setCurrentPage(1);
+  }, []);
+
+  const handleGroupByRootItemChange = useCallback((checked: boolean) => {
+    setGroupByRootItem(checked);
     setCurrentPage(1);
   }, []);
 
@@ -121,8 +161,19 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {/* Bulk actions bar */}
-      <div className="flex items-center justify-end gap-2 mb-2 min-h-[32px]">
+      {/* View and bulk actions bar */}
+      <div className="mb-2 flex min-h-[32px] items-center justify-between gap-3">
+        <label
+          htmlFor="group-by-root-item"
+          className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+        >
+          <Checkbox
+            id="group-by-root-item"
+            checked={groupByRootItem}
+            onCheckedChange={handleGroupByRootItemChange}
+          />
+          Group by root item
+        </label>
         {currentView === "inbox" &&
           filteredItems &&
           filteredItems.length > 0 && (
@@ -190,15 +241,26 @@ export default function NotificationsPage() {
           </div>
         ) : (
           <ul className="divide-y divide-border/40">
-            {pageItems?.map((item) => (
-              <NotificationRow
-                key={item.rootId}
-                item={item}
-                actions={actions}
-                currentView={currentView}
-                resolvedMap={resolvedMap}
-              />
-            ))}
+            {pageEntries?.map((entry) =>
+              entry.type === "item" ? (
+                <NotificationRow
+                  key={entry.item.rootId}
+                  item={entry.item}
+                  actions={actions}
+                  currentView={currentView}
+                  resolvedMap={resolvedMap}
+                />
+              ) : (
+                <NotificationActivityRow
+                  key={entry.event.id}
+                  item={entry.item}
+                  event={entry.event}
+                  actions={actions}
+                  currentView={currentView}
+                  resolvedMap={resolvedMap}
+                />
+              ),
+            )}
           </ul>
         )}
       </div>

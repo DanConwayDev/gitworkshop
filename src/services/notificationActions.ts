@@ -110,6 +110,25 @@ export function actionMarkAsRead(
   });
 }
 
+/** Mark one notification event as read without changing its sibling activity. */
+export function actionMarkEventAsRead(
+  entry: NotificationStoreEntry,
+  eventId: string,
+): void {
+  updateReadState(entry, (prev) => {
+    const allEvents = getAllNotificationEvents(entry);
+    const event = allEvents.find(
+      (candidate) =>
+        candidate.id === eventId && candidate.pubkey !== entry.pubkey,
+    );
+    if (!event || isEventRead(event, prev, new Set(prev.ri))) return prev;
+
+    const updated = { ...prev, ri: [...prev.ri, eventId] };
+    const cutoff = advanceReadCutoff(allEvents, updated, entry.pubkey);
+    return { ...updated, ...cutoff };
+  });
+}
+
 export function actionMarkAsUnread(
   entry: NotificationStoreEntry,
   rootId: string,
@@ -176,6 +195,37 @@ export function actionMarkAsArchived(
       .map((ev) => ev.id);
     if (newlyReadIds.length > 0) {
       updated = { ...updated, ri: [...updated.ri, ...newlyReadIds] };
+      const readCutoff = advanceReadCutoff(allEvents, updated, entry.pubkey);
+      updated = { ...updated, ...readCutoff };
+    }
+
+    return updated;
+  });
+}
+
+/** Archive one notification event without archiving its sibling activity. */
+export function actionMarkEventAsArchived(
+  entry: NotificationStoreEntry,
+  eventId: string,
+): void {
+  updateReadState(entry, (prev) => {
+    const allEvents = getAllNotificationEvents(entry);
+    const event = allEvents.find(
+      (candidate) =>
+        candidate.id === eventId && candidate.pubkey !== entry.pubkey,
+    );
+    if (!event || isEventArchived(event, prev, new Set(prev.ai))) return prev;
+
+    let updated = { ...prev, ai: [...prev.ai, eventId] };
+    const archivedCutoff = advanceArchivedCutoff(
+      allEvents,
+      updated,
+      entry.pubkey,
+    );
+    updated = { ...updated, ...archivedCutoff };
+
+    if (!isEventRead(event, updated, new Set(updated.ri))) {
+      updated = { ...updated, ri: [...updated.ri, eventId] };
       const readCutoff = advanceReadCutoff(allEvents, updated, entry.pubkey);
       updated = { ...updated, ...readCutoff };
     }

@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UserAvatar } from "@/components/UserAvatar";
+import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { RepoBadge } from "@/components/RepoBadge";
 import { cn } from "@/lib/utils";
 import { useRootEvent } from "@/hooks/useRootEvent";
@@ -40,7 +40,15 @@ import {
   buildNotificationLink,
 } from "@/lib/notificationUtils";
 import { eventIdToNevent } from "@/lib/routeUtils";
-import { REPO_KIND } from "@/lib/nip34";
+import {
+  COMMENT_KIND,
+  ISSUE_KIND,
+  LEGACY_REPLY_KIND,
+  PATCH_KIND,
+  PR_KIND,
+  PR_UPDATE_KIND,
+  REPO_KIND,
+} from "@/lib/nip34";
 import { StatusIcon } from "@/components/StatusIcon";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 import type { NotificationActions } from "@/hooks/useNotifications";
@@ -48,8 +56,10 @@ import type {
   NotificationItem,
   SocialNotificationItem,
   RepoZapNotificationItem,
+  ThreadNotificationItem,
 } from "@/lib/notifications";
 import type { ResolvedIssueLite } from "@/lib/nip34";
+import type { NostrEvent } from "nostr-tools";
 
 function repoCoordToNaddrPath(coord: string): string | undefined {
   const [kind, pubkey, ...identifierParts] = coord.split(":");
@@ -661,6 +671,134 @@ function RepoZapNotificationRow({
             >
               <ArchiveRestore className={cn("h-3 w-3", !compact && "mr-1")} />
               {!compact && "Inbox"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ungrouped thread activity row
+// ---------------------------------------------------------------------------
+
+function activityVerb(event: NostrEvent): string {
+  if (event.kind === COMMENT_KIND || event.kind === LEGACY_REPLY_KIND) {
+    return "commented on";
+  }
+  if (event.kind === PR_KIND) return "opened a pull request";
+  if (event.kind === ISSUE_KIND) return "opened an issue";
+  if (event.kind === PATCH_KIND) return "sent a patch";
+  if (event.kind === PR_UPDATE_KIND) return "pushed an update to";
+  return "added activity to";
+}
+
+/**
+ * Actor-first, one-event notification row used when root-item grouping is off.
+ * It deliberately marks only this event as read or archived so sibling activity
+ * on the same issue or PR remains visible.
+ */
+export function NotificationActivityRow({
+  item,
+  event,
+  actions,
+  currentView,
+  resolvedMap,
+}: {
+  item: ThreadNotificationItem;
+  event: NostrEvent;
+  actions: NotificationActions;
+  currentView: ViewTab;
+  resolvedMap?: Map<string, ResolvedIssueLite>;
+}) {
+  const rootEvent = useRootEvent(item.rootId);
+  const resolved = resolvedMap?.get(item.rootId);
+  const rootType = inferRootType(item);
+  const title = resolved?.currentSubject ?? resolveTitle(rootEvent, item);
+  const repoCoord = resolveRepoCoord(rootEvent, item);
+  const isUnread = item.unreadEventIds.includes(event.id);
+  const lastActive = useRelativeTime(event.created_at);
+  const nevent = eventIdToNevent(item.rootId);
+  const linkPath = buildNotificationLink(nevent, {
+    ...item,
+    unreadEventIds: isUnread ? [event.id] : [],
+  });
+
+  return (
+    <li
+      className={cn(
+        "group transition-colors",
+        isUnread
+          ? "border-l-2 border-l-pink-500 bg-accent/30 hover:bg-accent/50"
+          : "border-l-2 border-l-transparent hover:bg-accent/20",
+      )}
+    >
+      <div className="flex items-start">
+        <Link
+          to={linkPath}
+          className="flex min-w-0 flex-1 items-start gap-3 px-3 py-3"
+          onClick={() => isUnread && actions.markEventAsRead(event.id)}
+        >
+          <div className="w-2 shrink-0 pt-2.5">
+            {isUnread && <div className="h-2 w-2 rounded-full bg-pink-500" />}
+          </div>
+          <UserAvatar pubkey={event.pubkey} size="md" noHoverCard />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm leading-5">
+              <UserName pubkey={event.pubkey} />{" "}
+              <span className="text-muted-foreground">
+                {activityVerb(event)}
+              </span>
+            </p>
+            <p
+              className={cn(
+                "line-clamp-1 text-sm",
+                isUnread ? "font-medium text-foreground" : "text-foreground/80",
+              )}
+            >
+              {title.length > 70 ? `${title.slice(0, 67)}...` : title}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {lastActive}
+              </span>
+              <span className="text-xs text-muted-foreground/40">&middot;</span>
+              <RootTypeIcon type={rootType} compact={false} />
+              {repoCoord && (
+                <>
+                  <span className="text-xs text-muted-foreground/40">
+                    &middot;
+                  </span>
+                  <RepoBadge coord={repoCoord} repoNameOnly asSpan />
+                </>
+              )}
+            </div>
+          </div>
+        </Link>
+        <div className="hidden shrink-0 items-center gap-1 self-center pr-3 md:group-hover:flex">
+          {isUnread && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => actions.markEventAsRead(event.id)}
+              title="Mark activity as read"
+            >
+              <Eye className="mr-1 h-3 w-3" />
+              Read
+            </Button>
+          )}
+          {currentView === "inbox" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => actions.markEventAsArchived(event.id)}
+              title="Archive activity"
+            >
+              <Archive className="mr-1 h-3 w-3" />
+              Archive
             </Button>
           )}
         </div>
