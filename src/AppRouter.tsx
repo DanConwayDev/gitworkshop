@@ -18,6 +18,7 @@ import Index from "./pages/Index";
 import { LandingPage } from "./pages/LandingPage";
 import RepositoriesPage from "./pages/RepositoriesPage";
 import NotificationsPage from "./pages/NotificationsPage";
+import NotificationMockupsPage from "./pages/NotificationMockupsPage";
 import RelayPage from "./pages/RelayPage";
 import RepoLayout from "./pages/repo/RepoLayout";
 import Settings from "./pages/Settings";
@@ -380,6 +381,10 @@ function AppRouter() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/outbox" element={<OutboxPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route
+              path="/notifications/mockups"
+              element={<NotificationMockupsPage />}
+            />
             <Route path="/ngit" element={<NgitPage />} />
             {/* Backwards-compat redirects — must be before /:nip19 */}
             <Route path="/install" element={<Navigate to="/ngit" replace />} />
