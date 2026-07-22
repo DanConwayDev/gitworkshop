@@ -28,7 +28,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UserAvatar, UserName } from "@/components/UserAvatar";
+import { UserAvatar, UserLink, UserName } from "@/components/UserAvatar";
 import { RepoBadge } from "@/components/RepoBadge";
 import { cn } from "@/lib/utils";
 import { useRootEvent } from "@/hooks/useRootEvent";
@@ -170,7 +170,7 @@ function UnreadSummaryBadge({
   return (
     <Badge
       variant="secondary"
-      className="h-5 gap-1 px-1.5 text-[11px] font-semibold"
+      className="h-5 gap-1 px-1.5 text-[11px] font-medium"
     >
       <Icon className={cn("h-3 w-3", iconColor)} />
       {summary}
@@ -189,27 +189,29 @@ function RootPurposeBadge({ purpose }: { purpose: string }) {
 function ActivityActors({ pubkeys }: { pubkeys: string[] }) {
   if (pubkeys.length === 0) return null;
 
-  const name = (pubkey: string) => (
-    <UserName
+  const actor = (pubkey: string) => (
+    <UserLink
       key={pubkey}
       pubkey={pubkey}
-      className="font-medium text-foreground"
+      noLink
+      className="inline-flex rounded-full bg-muted/70 py-0.5 pl-0.5 pr-2 text-foreground"
+      nameClassName="text-xs"
     />
   );
 
-  if (pubkeys.length === 1) return name(pubkeys[0]);
+  if (pubkeys.length === 1) return actor(pubkeys[0]);
   if (pubkeys.length === 2) {
     return (
       <>
-        {name(pubkeys[0])} <span>and</span> {name(pubkeys[1])}
+        {actor(pubkeys[0])} <span>and</span> {actor(pubkeys[1])}
       </>
     );
   }
   if (pubkeys.length === 3) {
     return (
       <>
-        {name(pubkeys[0])}, {name(pubkeys[1])} <span>and</span>{" "}
-        {name(pubkeys[2])}
+        {actor(pubkeys[0])}, {actor(pubkeys[1])} <span>and</span>{" "}
+        {actor(pubkeys[2])}
       </>
     );
   }
@@ -218,7 +220,7 @@ function ActivityActors({ pubkeys }: { pubkeys: string[] }) {
   const remainingCount = pubkeys.length - avatarPubkeys.length - 2;
   return (
     <>
-      {name(pubkeys[0])}, {name(pubkeys[1])} <span>and</span>
+      {actor(pubkeys[0])}, {actor(pubkeys[1])} <span>and</span>
       <span className="inline-flex -space-x-1.5 align-middle">
         {avatarPubkeys.map((pubkey) => (
           <UserAvatar
@@ -269,7 +271,15 @@ function ThreadNotificationRow({
   const nevent = eventIdToNevent(item.rootId);
   const linkPath = buildNotificationLink(nevent, item);
 
-  const commenters = compact ? [] : getCommenters(item);
+  const unreadCommenters =
+    compact || !item.unread
+      ? []
+      : getCommenters({
+          ...item,
+          events: item.events.filter((event) =>
+            item.unreadEventIds.includes(event.id),
+          ),
+        });
   const lastActive = useRelativeTime(item.latestActivity);
 
   return (
@@ -330,18 +340,6 @@ function ThreadNotificationRow({
 
             {/* Latest activity author + root/unread state */}
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {summary.unreadText && (
-                <UnreadSummaryBadge
-                  summary={summary.unreadText}
-                  hasMerge={summary.hasMerge}
-                  hasClosed={summary.hasClosed}
-                />
-              )}
-              {commenters[0] && (
-                <span className="min-w-0 text-xs text-muted-foreground">
-                  by <ActivityActors pubkeys={commenters} />
-                </span>
-              )}
               {summary.purpose &&
                 (isNewRoot ? (
                   <RootPurposeBadge purpose={summary.purpose} />
@@ -350,6 +348,18 @@ function ThreadNotificationRow({
                     {summary.purpose}
                   </span>
                 ))}
+              {summary.unreadText && (
+                <UnreadSummaryBadge
+                  summary={summary.unreadText}
+                  hasMerge={summary.hasMerge}
+                  hasClosed={summary.hasClosed}
+                />
+              )}
+              {unreadCommenters[0] && (
+                <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  <ActivityActors pubkeys={unreadCommenters} />
+                </span>
+              )}
             </div>
           </div>
 
