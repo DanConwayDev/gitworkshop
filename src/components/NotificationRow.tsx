@@ -360,11 +360,14 @@ function ThreadNotificationRow({
                   <ActivityActors pubkeys={unreadCommenters} />
                 </span>
               )}
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                active {lastActive}
+              </span>
             </div>
           </div>
 
           {/* Root context occupies the former activity-avatar position. */}
-          <div className="hidden flex-col items-end gap-0.5 self-center shrink-0 text-right md:flex group-hover:hidden">
+          <div className="hidden items-center self-center shrink-0 text-right md:flex group-hover:hidden">
             {repoCoord && (
               <RepoBadge
                 coord={repoCoord}
@@ -372,9 +375,6 @@ function ThreadNotificationRow({
                 asSpan
               />
             )}
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
-              active {lastActive}
-            </span>
           </div>
         </Link>
 
