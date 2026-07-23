@@ -39,6 +39,7 @@ import {
   getZapEventPointer,
   getZapAddressPointer,
 } from "applesauce-common/helpers";
+import { getParentId } from "@/lib/threadTree";
 import {
   ISSUE_KIND,
   PATCH_KIND,
@@ -368,6 +369,37 @@ export function buildRepoZapFilter(
 // ---------------------------------------------------------------------------
 
 /**
+ * Follow NIP-10/NIP-22 parent pointers until reaching a root item.
+ *
+ * Comment-root pointers should normally reference the thread root directly,
+ * but following locally known chains makes grouping robust to malformed or
+ * legacy nested pointers. A loop falls back to the initial comment ID, rather
+ * than allowing a cyclic event graph to make the notification disappear.
+ */
+function resolveThreadRootId(
+  eventId: string,
+  threadEvents?: Map<string, NostrEvent>,
+): string {
+  if (!threadEvents) return eventId;
+
+  const seen = new Set<string>();
+  let rootId = eventId;
+  while (true) {
+    if (seen.has(rootId)) return eventId;
+    seen.add(rootId);
+
+    const event = threadEvents.get(rootId);
+    if (!event) return rootId;
+    if (event.kind === ISSUE_KIND || event.kind === PR_KIND) return rootId;
+
+    const nextRootId = getParentId(event);
+    if (event.kind === PATCH_KIND && !nextRootId) return rootId;
+    if (!nextRootId) return rootId;
+    rootId = nextRootId;
+  }
+}
+
+/**
  * Extract the root issue/PR/patch event ID from a thread notification event.
  *
  * - If the event IS a root (issue/PR/patch kind), its own ID is the root.
@@ -381,8 +413,8 @@ export function buildRepoZapFilter(
  *     - #k in NIP34_ROOT_KINDS → #e is the root item ID. #k is read from the
  *       embedded zap request first (always set by the client), falling back to
  *       the receipt's own #k tag.
- *     - #k = COMMENT_KIND → look up the comment's thread root in
- *       commentRootMap; falls back to #e (the comment ID) if unavailable.
+ *     - #k = COMMENT_KIND → recursively follow the zapped comment's NIP-22
+ *       and NIP-10 parent pointers, falling back to #e if unavailable.
  *     - #k is any other known kind (e.g. kind:1) → returns undefined (not a
  *       git notification; prevents zaps on regular Nostr notes from appearing)
  *     - #k absent in both request and receipt → falls through to #e
@@ -390,7 +422,7 @@ export function buildRepoZapFilter(
  */
 export function getNotificationRootId(
   ev: NostrEvent,
-  commentRootMap?: Map<string, string>,
+  threadEvents?: Map<string, NostrEvent>,
 ): string | undefined {
   // Issues and PRs are always roots — their own ID
   if (ev.kind === ISSUE_KIND || ev.kind === PR_KIND) {
@@ -402,18 +434,25 @@ export function getNotificationRootId(
   // A root patch has no such #e tag — its own ID is the root.
   if (ev.kind === PATCH_KIND) {
     const parentPatchId = ev.tags.find(([t]) => t === "e")?.[1];
-    return parentPatchId ?? ev.id;
+    return parentPatchId
+      ? resolveThreadRootId(parentPatchId, threadEvents)
+      : ev.id;
   }
 
   // NIP-22 comment — uppercase E root pointer
   if (ev.kind === COMMENT_KIND) {
     const rootPointer = getCommentRootPointer(ev);
-    return rootPointer && "id" in rootPointer ? rootPointer.id : undefined;
+    return rootPointer &&
+      "id" in rootPointer &&
+      typeof rootPointer.id === "string"
+      ? resolveThreadRootId(rootPointer.id, threadEvents)
+      : undefined;
   }
 
   // PR update (kind:1619) — uppercase E tag points to the root PR
   if (ev.kind === PR_UPDATE_KIND) {
-    return ev.tags.find(([t]) => t === "E")?.[1];
+    const rootId = ev.tags.find(([t]) => t === "E")?.[1];
+    return rootId ? resolveThreadRootId(rootId, threadEvents) : undefined;
   }
 
   // NIP-57 zap receipt (kind:9735) — route by the zapped event kind
@@ -449,7 +488,7 @@ export function getNotificationRootId(
     // Zapping a NIP-22 comment → resolve its uppercase E thread-root pointer.
     // Fall back to the comment ID until the zapped comment is available.
     if (k === String(COMMENT_KIND) && e) {
-      return commentRootMap?.get(e) ?? e;
+      return resolveThreadRootId(e, threadEvents);
     }
 
     // If #k is explicitly set to a non-NIP-34, non-comment kind (e.g. kind:1),
@@ -465,7 +504,9 @@ export function getNotificationRootId(
   // Status changes (kinds:1630–1633) and legacy NIP-34 replies (kind:1622)
   // both use the NIP-10 root #e tag to reference their target.
   const nip10 = getNip10References(ev);
-  return nip10.root?.e?.id;
+  return nip10.root?.e?.id
+    ? resolveThreadRootId(nip10.root.e.id, threadEvents)
+    : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -500,14 +541,14 @@ export function isEventArchived(
  * Returns items sorted by latestActivity (newest first).
  * Events from the user's own pubkey are excluded.
  *
- * @param commentRootMap - Locally available NIP-22 comment IDs mapped to their
- *   uppercase E thread-root IDs. This groups zaps on comments with their item.
+ * @param threadEvents - Locally available events indexed by ID. Their NIP-10
+ *   and NIP-22 parent pointers are recursively traversed for grouping.
  */
 export function groupNotifications(
   events: NostrEvent[],
   state: NotificationReadState,
   selfPubkey: string,
-  commentRootMap?: Map<string, string>,
+  threadEvents?: Map<string, NostrEvent>,
   nonGitEventIds?: Set<string>,
 ): ThreadNotificationItem[] {
   const readIdSet = new Set(state.ri);
@@ -526,7 +567,7 @@ export function groupNotifications(
     // with no #k tag). They are held back until confirmed as git-related.
     if (nonGitEventIds?.has(ev.id)) continue;
 
-    const rootId = getNotificationRootId(ev, commentRootMap);
+    const rootId = getNotificationRootId(ev, threadEvents);
     if (!rootId) continue;
 
     const group = groups.get(rootId) ?? { events: [], latestActivity: 0 };

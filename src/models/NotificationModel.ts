@@ -21,12 +21,9 @@ import {
 } from "rxjs/operators";
 import type { Model } from "applesauce-core/event-store";
 import type { NostrEvent } from "nostr-tools";
-import {
-  getCommentRootPointer,
-  getZapEventPointer,
-  isCommentEventPointer,
-} from "applesauce-common/helpers";
-import { REPO_KIND, COMMENT_KIND } from "@/lib/nip34";
+import { getZapEventPointer } from "applesauce-common/helpers";
+import { REPO_KIND } from "@/lib/nip34";
+import { getParentId } from "@/lib/threadTree";
 import {
   buildNotificationFilters,
   buildRepoStarFilter,
@@ -72,9 +69,8 @@ export function NotificationModel(
     // Thread events — static filters (includes zap receipts on thread items)
     const threadEvents$ = store.timeline(threadFilters);
 
-    // Zap receipts identify their target comment, rather than that comment's
-    // thread root. Watch those target comments even when they would not match
-    // the notification filters (for example, a comment authored by us).
+    // Zap receipts identify their target event rather than its thread root.
+    // Watch targets that do not independently match notification filters.
     const zappedCommentEvents$ = threadEvents$.pipe(
       map((events) =>
         [
@@ -95,9 +91,7 @@ export function NotificationModel(
       ),
       switchMap((ids) =>
         ids.length > 0
-          ? (store.timeline([
-              { kinds: [COMMENT_KIND], ids },
-            ]) as unknown as Observable<NostrEvent[]>)
+          ? (store.timeline([{ ids }]) as unknown as Observable<NostrEvent[]>)
           : of([] as NostrEvent[]),
       ),
     );
@@ -155,12 +149,26 @@ export function NotificationModel(
           const allStarEvents = starEventsRaw as NostrEvent[];
           const allRepoZapEvents = zapEventsRaw as NostrEvent[];
 
-          const commentRootMap = new Map<string, string>();
-          for (const event of [...allThreadEvents, ...commentEvents]) {
-            if (event.kind !== COMMENT_KIND) continue;
-            const rootPointer = getCommentRootPointer(event);
-            if (rootPointer && isCommentEventPointer(rootPointer)) {
-              commentRootMap.set(event.id, rootPointer.id);
+          const threadEventsById = new Map(
+            [...allThreadEvents, ...commentEvents].map((event) => [
+              event.id,
+              event,
+            ]),
+          );
+          const pendingEvents = [...threadEventsById.values()];
+          while (pendingEvents.length > 0) {
+            const event = pendingEvents.pop();
+            if (!event) continue;
+            const parentId = getParentId(event);
+            if (parentId && !threadEventsById.has(parentId)) {
+              const parent = store.getByFilters([
+                { ids: [parentId] },
+              ]) as NostrEvent[];
+              const parentEvent = parent[0];
+              if (parentEvent) {
+                threadEventsById.set(parentEvent.id, parentEvent);
+                pendingEvents.push(parentEvent);
+              }
             }
           }
 
@@ -186,7 +194,7 @@ export function NotificationModel(
             [...nonZapThreadEvents, ...threadZapEvents],
             readState,
             pubkey,
-            commentRootMap,
+            threadEventsById,
             nonGitEventIds,
           );
           const socialItems = groupSocialNotifications(
