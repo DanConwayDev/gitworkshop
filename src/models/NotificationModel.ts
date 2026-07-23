@@ -16,11 +16,7 @@ import { combineLatest, of, type Observable } from "rxjs";
 import { auditTime, map, switchMap } from "rxjs/operators";
 import type { Model } from "applesauce-core/event-store";
 import type { NostrEvent } from "nostr-tools";
-import {
-  getCommentRootPointer,
-  isCommentEventPointer,
-} from "applesauce-common/helpers";
-import { REPO_KIND, COMMENT_KIND } from "@/lib/nip34";
+import { REPO_KIND } from "@/lib/nip34";
 import {
   buildNotificationFilters,
   buildRepoStarFilter,
@@ -116,20 +112,6 @@ export function NotificationModel(
           const allStarEvents = starEventsRaw as NostrEvent[];
           const allRepoZapEvents = zapEventsRaw as NostrEvent[];
 
-          // Build a commentId→rootId resolution map from the thread events
-          // already in the store. This lets getNotificationRootId correctly
-          // group zap receipts on NIP-22 comments (kind:1111) under their
-          // parent thread rather than as orphaned items.
-          const commentRootMap = new Map<string, string>();
-          for (const ev of allThreadEvents) {
-            if (ev.kind === COMMENT_KIND) {
-              const rootPointer = getCommentRootPointer(ev);
-              if (rootPointer && isCommentEventPointer(rootPointer)) {
-                commentRootMap.set(ev.id, rootPointer.id);
-              }
-            }
-          }
-
           // Separate thread zaps from repo zaps already handled above.
           // Repo zap receipts are those with k=REPO_KIND OR with an #a tag
           // (addressable-event zap). Thread items are regular events so their
@@ -152,7 +134,6 @@ export function NotificationModel(
             [...nonZapThreadEvents, ...threadZapEvents],
             readState,
             pubkey,
-            commentRootMap,
             nonGitEventIds,
           );
           const socialItems = groupSocialNotifications(

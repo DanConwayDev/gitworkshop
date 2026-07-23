@@ -381,17 +381,15 @@ export function buildRepoZapFilter(
  *     - #k in NIP34_ROOT_KINDS → #e is the root item ID. #k is read from the
  *       embedded zap request first (always set by the client), falling back to
  *       the receipt's own #k tag.
- *     - #k = COMMENT_KIND → look up rootId in commentRootMap (if provided);
- *       falls back to #e (the comment ID) if unknown
+ *     - #k = COMMENT_KIND → #e is the zapped comment. Zap receipts do not
+ *       carry the comment's thread-root pointer, so the comment itself is the
+ *       grouping root rather than guessing a root from separately loaded data.
  *     - #k is any other known kind (e.g. kind:1) → returns undefined (not a
  *       git notification; prevents zaps on regular Nostr notes from appearing)
  *     - #k absent in both request and receipt → falls through to #e
  * - Returns undefined if no root can be determined.
  */
-export function getNotificationRootId(
-  ev: NostrEvent,
-  commentRootMap?: Map<string, string>,
-): string | undefined {
+export function getNotificationRootId(ev: NostrEvent): string | undefined {
   // Issues and PRs are always roots — their own ID
   if (ev.kind === ISSUE_KIND || ev.kind === PR_KIND) {
     return ev.id;
@@ -446,9 +444,12 @@ export function getNotificationRootId(
       return e;
     }
 
-    // Zapping a NIP-22 comment → resolve to the comment's thread root
+    // Zapping a NIP-22 comment → the receipt only identifies the zapped
+    // comment, not its thread root. Keep that comment as the grouping root;
+    // resolving through unrelated, already-loaded comments would make the
+    // same receipt move between groups as local store contents change.
     if (k === String(COMMENT_KIND) && e) {
-      return commentRootMap?.get(e) ?? e;
+      return e;
     }
 
     // If #k is explicitly set to a non-NIP-34, non-comment kind (e.g. kind:1),
@@ -499,15 +500,11 @@ export function isEventArchived(
  * Returns items sorted by latestActivity (newest first).
  * Events from the user's own pubkey are excluded.
  *
- * @param commentRootMap - Optional map from comment event ID to thread root ID,
- *   used to resolve the root for zap receipts that target a NIP-22 comment.
- *   Built by the caller from the EventStore so this function stays pure.
  */
 export function groupNotifications(
   events: NostrEvent[],
   state: NotificationReadState,
   selfPubkey: string,
-  commentRootMap?: Map<string, string>,
   nonGitEventIds?: Set<string>,
 ): ThreadNotificationItem[] {
   const readIdSet = new Set(state.ri);
@@ -526,7 +523,7 @@ export function groupNotifications(
     // with no #k tag). They are held back until confirmed as git-related.
     if (nonGitEventIds?.has(ev.id)) continue;
 
-    const rootId = getNotificationRootId(ev, commentRootMap);
+    const rootId = getNotificationRootId(ev);
     if (!rootId) continue;
 
     const group = groups.get(rootId) ?? { events: [], latestActivity: 0 };
