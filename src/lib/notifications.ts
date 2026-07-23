@@ -35,6 +35,7 @@ import {
   getNip10References,
   getZapAmount,
   getZapRequest,
+  getZapSender,
   getZapEventPointer,
   getZapAddressPointer,
 } from "applesauce-common/helpers";
@@ -682,9 +683,9 @@ export function groupRepoZapNotifications(
   // Build coord → events map in a single O(n) pass
   const byCoord = new Map<string, NostrEvent[]>();
   for (const ev of repoZapEvents) {
-    // Filter out self-zaps (sender is us) by checking the embedded zap request
-    // sender pubkey (uppercase P tag), falling back to the receipt pubkey.
-    const senderPubkey = ev.tags.find(([t]) => t === "P")?.[1] ?? ev.pubkey;
+    // Zap receipts are published by a lightning service; their sender is the
+    // author of the embedded zap request.
+    const senderPubkey = getZapSender(ev) ?? ev.pubkey;
     if (senderPubkey === selfPubkey) continue;
 
     for (const [t, v] of ev.tags) {

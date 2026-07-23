@@ -85,11 +85,13 @@ function repoCoordToNaddrPath(coord: string): string | undefined {
 function RepoNotificationLink({
   to,
   rootId,
+  eventId,
   actions,
   children,
 }: {
   to: string | undefined;
   rootId: string;
+  eventId?: string;
   actions: NotificationActions;
   children: ReactNode;
 }) {
@@ -99,7 +101,11 @@ function RepoNotificationLink({
     return (
       <div
         className={cn(className, "cursor-default")}
-        onClick={() => actions.markAsRead(rootId)}
+        onClick={() =>
+          eventId
+            ? actions.markEventAsRead(eventId)
+            : actions.markAsRead(rootId)
+        }
       >
         {children}
       </div>
@@ -110,7 +116,9 @@ function RepoNotificationLink({
     <Link
       to={to}
       className={cn(className, "cursor-pointer")}
-      onClick={() => actions.markAsRead(rootId)}
+      onClick={() =>
+        eventId ? actions.markEventAsRead(eventId) : actions.markAsRead(rootId)
+      }
     >
       {children}
     </Link>
@@ -610,6 +618,8 @@ function RepoZapNotificationRow({
   const actorPubkeys = useMemo(() => getActorPubkeys(item), [item]);
   const lastActive = useRelativeTime(item.latestActivity);
   const linkPath = repoCoordToNaddrPath(item.repoCoord);
+  const singleEventId =
+    item.events.length === 1 ? item.events[0]?.id : undefined;
 
   // Format sats compactly for display
   const satsLabel =
@@ -632,6 +642,7 @@ function RepoZapNotificationRow({
         <RepoNotificationLink
           to={linkPath}
           rootId={item.rootId}
+          eventId={singleEventId}
           actions={actions}
         >
           {/* Unread dot */}
@@ -701,13 +712,17 @@ function RepoZapNotificationRow({
               variant="ghost"
               size="sm"
               className={cn("h-7 text-xs", compact && "w-7 p-0")}
-              onClick={() => actions.markAsRead(item.rootId)}
+              onClick={() =>
+                singleEventId
+                  ? actions.markEventAsRead(singleEventId)
+                  : actions.markAsRead(item.rootId)
+              }
               title="Mark as read"
             >
               <Eye className={cn("h-3 w-3", !compact && "mr-1")} />
               {!compact && "Read"}
             </Button>
-          ) : (
+          ) : !singleEventId ? (
             <Button
               variant="ghost"
               size="sm"
@@ -718,13 +733,17 @@ function RepoZapNotificationRow({
               <EyeOff className={cn("h-3 w-3", !compact && "mr-1")} />
               {!compact && "Unread"}
             </Button>
-          )}
+          ) : null}
           {currentView === "inbox" && (
             <Button
               variant="ghost"
               size="sm"
               className={cn("h-7 text-xs", compact && "w-7 p-0")}
-              onClick={() => actions.markAsArchived(item.rootId)}
+              onClick={() =>
+                singleEventId
+                  ? actions.markEventAsArchived(singleEventId)
+                  : actions.markAsArchived(item.rootId)
+              }
               title="Archive"
             >
               <Archive className={cn("h-3 w-3", !compact && "mr-1")} />
@@ -736,7 +755,11 @@ function RepoZapNotificationRow({
               variant="ghost"
               size="sm"
               className={cn("h-7 text-xs", compact && "w-7 p-0")}
-              onClick={() => actions.markAsUnarchived(item.rootId)}
+              onClick={() =>
+                singleEventId
+                  ? actions.markEventAsUnarchived(singleEventId)
+                  : actions.markAsUnarchived(item.rootId)
+              }
               title="Move to inbox"
             >
               <ArchiveRestore className={cn("h-3 w-3", !compact && "mr-1")} />

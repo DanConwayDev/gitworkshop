@@ -30,11 +30,12 @@ import type {
   ThreadNotificationItem,
 } from "@/lib/notifications";
 import type { NostrEvent } from "nostr-tools";
+import { getZapAmount } from "applesauce-common/helpers";
 
 const ITEMS_PER_PAGE = 10;
 
 type NotificationDisplayEntry =
-  | { type: "item"; item: NotificationItem }
+  | { type: "item"; item: NotificationItem; key?: string }
   | { type: "activity"; item: ThreadNotificationItem; event: NostrEvent };
 
 export default function NotificationsPage() {
@@ -76,9 +77,10 @@ export default function NotificationsPage() {
     }
 
     const entries = items.flatMap<NotificationDisplayEntry>((item) => {
-      // Repository stars and zaps are intrinsically repository-level
-      // notifications, so their existing grouping remains intact.
-      if (item.kind !== "thread") {
+      // Repository stars remain repository-level notifications. Individual
+      // zaps, however, need to be visible as their own activity when grouping
+      // by root item is disabled.
+      if (item.kind === "repo-star") {
         return filteredItems.includes(item) ? [{ type: "item", item }] : [];
       }
 
@@ -91,6 +93,26 @@ export default function NotificationsPage() {
             ? isArchived
             : true;
       });
+
+      if (item.kind === "repo-zap") {
+        return events.map((event) => ({
+          type: "item",
+          key: event.id,
+          item: {
+            ...item,
+            events: [event],
+            unread: item.unreadEventIds.includes(event.id),
+            archived: archivedIds.has(event.id),
+            archivedEventIds: archivedIds.has(event.id) ? [event.id] : [],
+            latestActivity: event.created_at,
+            unreadEventIds: item.unreadEventIds.includes(event.id)
+              ? [event.id]
+              : [],
+            totalSats: Math.floor((getZapAmount(event) ?? 0) / 1000),
+          },
+        }));
+      }
+
       return events.map((event) => ({ type: "activity", item, event }));
     });
 
@@ -259,7 +281,7 @@ export default function NotificationsPage() {
             {pageEntries?.map((entry) =>
               entry.type === "item" ? (
                 <NotificationRow
-                  key={entry.item.rootId}
+                  key={entry.key ?? entry.item.rootId}
                   item={entry.item}
                   actions={actions}
                   currentView={currentView}
