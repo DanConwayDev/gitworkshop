@@ -33,6 +33,17 @@ jobs:
       - name: Run e2e tests
         run: nix develop --command pnpm test:e2e
 
+      # Deploy the exact files produced by the test command instead of
+      # rebuilding the application in the deployment job.
+      - name: Upload tested web build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+          if-no-files-found: error
+          include-hidden-files: true
+
   android-lint:
     runs-on: ubuntu-latest
     steps:
@@ -60,3 +71,38 @@ jobs:
       # Keep Android tooling outside the Nix job: this is the setup available
       # to regular GitHub Actions and the intentionally minimal act runner.
       - run: pnpm android:lint
+
+  deploy-netlify:
+    runs-on: ubuntu-latest
+    needs: [test, android-lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: netlify-production
+      cancel-in-progress: true
+    steps:
+      # Keep netlify.toml in the workspace so the CLI deploy includes the
+      # existing redirects, cache policy, and security headers.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Download tested web build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+
+      - name: Deploy to Netlify production
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          set -eu
+          : "${NETLIFY_AUTH_TOKEN:?Set the NETLIFY_AUTH_TOKEN secret.}"
+          : "${NETLIFY_SITE_ID:?Set the NETLIFY_SITE_ID secret.}"
+          npx --yes netlify-cli@26.2.0 deploy \
+            --prod \
+            --dir=dist \
+            --message="ngit act $GITHUB_SHA"
