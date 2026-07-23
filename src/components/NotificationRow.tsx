@@ -10,6 +10,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { nip19 } from "nostr-tools";
+import { useActiveAccount } from "applesauce-react/hooks";
 import {
   CircleDot,
   GitPullRequest,
@@ -25,8 +26,9 @@ import {
   EyeOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UserAvatar } from "@/components/UserAvatar";
+import { UserAvatar, UserLink, UserName } from "@/components/UserAvatar";
 import { RepoBadge } from "@/components/RepoBadge";
 import { cn } from "@/lib/utils";
 import { useRootEvent } from "@/hooks/useRootEvent";
@@ -40,7 +42,15 @@ import {
   buildNotificationLink,
 } from "@/lib/notificationUtils";
 import { eventIdToNevent } from "@/lib/routeUtils";
-import { REPO_KIND } from "@/lib/nip34";
+import {
+  COMMENT_KIND,
+  ISSUE_KIND,
+  LEGACY_REPLY_KIND,
+  PATCH_KIND,
+  PR_KIND,
+  PR_UPDATE_KIND,
+  REPO_KIND,
+} from "@/lib/nip34";
 import { StatusIcon } from "@/components/StatusIcon";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 import type { NotificationActions } from "@/hooks/useNotifications";
@@ -48,8 +58,10 @@ import type {
   NotificationItem,
   SocialNotificationItem,
   RepoZapNotificationItem,
+  ThreadNotificationItem,
 } from "@/lib/notifications";
 import type { ResolvedIssueLite } from "@/lib/nip34";
+import type { NostrEvent } from "nostr-tools";
 
 function repoCoordToNaddrPath(coord: string): string | undefined {
   const [kind, pubkey, ...identifierParts] = coord.split(":");
@@ -143,12 +155,10 @@ function UnreadSummaryBadge({
   summary,
   hasMerge,
   hasClosed,
-  isUnread,
 }: {
   summary: string;
   hasMerge: boolean;
   hasClosed: boolean;
-  isUnread: boolean;
 }) {
   const Icon = hasMerge ? GitMerge : hasClosed ? XCircle : MessageCircle;
   const iconColor = hasMerge
@@ -158,12 +168,84 @@ function UnreadSummaryBadge({
       : "text-muted-foreground";
 
   return (
-    <span
-      className={`inline-flex items-center gap-0.5 text-xs ${isUnread ? "text-pink-600 dark:text-pink-400 font-medium" : "text-muted-foreground"}`}
+    <Badge
+      variant="secondary"
+      className="h-5 gap-1 px-1.5 text-[11px] font-medium"
     >
-      <Icon className={`h-3 w-3 ${iconColor}`} />
+      <Icon className={cn("h-3 w-3", iconColor)} />
       {summary}
-    </span>
+    </Badge>
+  );
+}
+
+function RootPurposeBadge({
+  purpose,
+  isUnread,
+}: {
+  purpose: string;
+  isUnread: boolean;
+}) {
+  return (
+    <Badge
+      variant={isUnread ? "default" : "secondary"}
+      className={cn(
+        "h-5 px-1.5 text-[11px] font-semibold capitalize",
+        isUnread && "bg-pink-600 hover:bg-pink-600",
+      )}
+    >
+      {purpose}
+    </Badge>
+  );
+}
+
+function ActivityActors({ pubkeys }: { pubkeys: string[] }) {
+  if (pubkeys.length === 0) return null;
+
+  const actor = (pubkey: string) => (
+    <UserLink
+      key={pubkey}
+      pubkey={pubkey}
+      noLink
+      className="inline-flex rounded-full bg-muted/70 py-0.5 pl-0.5 pr-2 text-foreground"
+      nameClassName="text-xs"
+    />
+  );
+
+  if (pubkeys.length === 1) return actor(pubkeys[0]);
+  if (pubkeys.length === 2) {
+    return (
+      <>
+        {actor(pubkeys[0])} <span>and</span> {actor(pubkeys[1])}
+      </>
+    );
+  }
+  if (pubkeys.length === 3) {
+    return (
+      <>
+        {actor(pubkeys[0])}, {actor(pubkeys[1])} <span>and</span>{" "}
+        {actor(pubkeys[2])}
+      </>
+    );
+  }
+
+  const avatarPubkeys = pubkeys.slice(2, 6);
+  const remainingCount = pubkeys.length - avatarPubkeys.length - 2;
+  return (
+    <>
+      {actor(pubkeys[0])}, {actor(pubkeys[1])} <span>and</span>
+      <span className="inline-flex -space-x-1.5 align-middle">
+        {avatarPubkeys.map((pubkey) => (
+          <UserAvatar
+            key={pubkey}
+            pubkey={pubkey}
+            size="sm"
+            className="h-5 w-5 border border-background text-[8px]"
+            noHoverCard
+          />
+        ))}
+      </span>
+      {remainingCount > 0 && <span>+{remainingCount}</span>}
+    </>
   );
 }
 
@@ -184,17 +266,32 @@ function ThreadNotificationRow({
   currentView: ViewTab;
   resolvedMap?: Map<string, ResolvedIssueLite>;
 }) {
+  const activeAccount = useActiveAccount();
   const rootEvent = useRootEvent(item.rootId);
 
   const resolved = resolvedMap?.get(item.rootId);
   const rootType = inferRootType(item);
   const title = resolved?.currentSubject ?? resolveTitle(rootEvent, item);
   const repoCoord = resolveRepoCoord(rootEvent, item);
+  const isOwnRepository = repoCoord
+    ? repoOwnerPubkey(repoCoord) === activeAccount?.pubkey
+    : false;
   const summary = buildNotificationSummary(item);
+  const isNewRoot = ["new issue", "new PR", "new patch"].includes(
+    summary.purpose ?? "",
+  );
   const nevent = eventIdToNevent(item.rootId);
   const linkPath = buildNotificationLink(nevent, item);
 
-  const commenters = compact ? [] : getCommenters(item);
+  const unreadCommenters =
+    compact || !item.unread
+      ? []
+      : getCommenters({
+          ...item,
+          events: item.events.filter((event) =>
+            item.unreadEventIds.includes(event.id),
+          ),
+        });
   const lastActive = useRelativeTime(item.latestActivity);
 
   return (
@@ -253,64 +350,47 @@ function ThreadNotificationRow({
               {title.length > 70 ? `${title.slice(0, 67)}...` : title}
             </p>
 
-            {/* Sub-row: timestamp · purpose · unread text · repo badge */}
+            {/* Latest activity author + root/unread state */}
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="text-xs text-muted-foreground shrink-0">
-                active {lastActive}
-              </span>
-              {summary.purpose && (
-                <>
-                  <span className="text-muted-foreground/40 text-xs">
-                    &middot;
-                  </span>
+              {summary.purpose &&
+                (isNewRoot ? (
+                  <RootPurposeBadge
+                    purpose={summary.purpose}
+                    isUnread={item.unread}
+                  />
+                ) : (
                   <span className="text-xs text-muted-foreground">
                     {summary.purpose}
                   </span>
-                </>
-              )}
+                ))}
               {summary.unreadText && (
-                <>
-                  <span className="text-muted-foreground/40 text-xs">
-                    &middot;
-                  </span>
-                  <UnreadSummaryBadge
-                    summary={summary.unreadText}
-                    hasMerge={summary.hasMerge}
-                    hasClosed={summary.hasClosed}
-                    isUnread={item.unread}
-                  />
-                </>
+                <UnreadSummaryBadge
+                  summary={summary.unreadText}
+                  hasMerge={summary.hasMerge}
+                  hasClosed={summary.hasClosed}
+                />
               )}
-              {repoCoord && (
-                <>
-                  <span className="text-muted-foreground/40 text-xs">
-                    &middot;
-                  </span>
-                  <RepoBadge coord={repoCoord} asSpan />
-                </>
+              {unreadCommenters[0] && (
+                <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  <ActivityActors pubkeys={unreadCommenters} />
+                </span>
               )}
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                active {lastActive}
+              </span>
             </div>
           </div>
 
-          {/* Commenter avatars — hidden on hover, hidden in compact */}
-          {!compact && (
-            <div className="hidden md:flex items-center gap-1 self-center shrink-0 group-hover:hidden">
-              {commenters.slice(0, 3).map((pk) => (
-                <UserAvatar
-                  key={pk}
-                  pubkey={pk}
-                  size="sm"
-                  className="h-5 w-5 text-[8px] opacity-60"
-                  noHoverCard
-                />
-              ))}
-              {commenters.length > 3 && (
-                <span className="text-[10px] text-muted-foreground/60">
-                  +{commenters.length - 3}
-                </span>
-              )}
-            </div>
-          )}
+          {/* Root context occupies the former activity-avatar position. */}
+          <div className="hidden items-center self-center shrink-0 text-right md:flex group-hover:hidden">
+            {repoCoord && (
+              <RepoBadge
+                coord={repoCoord}
+                repoNameOnly={isOwnRepository}
+                asSpan
+              />
+            )}
+          </div>
         </Link>
 
         {/* Action buttons — outside the link, visible on hover. Icon-only when compact. */}
@@ -661,6 +741,175 @@ function RepoZapNotificationRow({
             >
               <ArchiveRestore className={cn("h-3 w-3", !compact && "mr-1")} />
               {!compact && "Inbox"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ungrouped thread activity row
+// ---------------------------------------------------------------------------
+
+function activityVerb(event: NostrEvent): string {
+  if (event.kind === COMMENT_KIND || event.kind === LEGACY_REPLY_KIND) {
+    return "commented on";
+  }
+  if (event.kind === PR_KIND) return "opened a pull request";
+  if (event.kind === ISSUE_KIND) return "opened an issue";
+  if (event.kind === PATCH_KIND) return "sent a patch";
+  if (event.kind === PR_UPDATE_KIND) return "pushed an update to";
+  return "updated";
+}
+
+function repoOwnerPubkey(coord: string): string | undefined {
+  const [, pubkey] = coord.split(":");
+  return /^[0-9a-f]{64}$/.test(pubkey) ? pubkey : undefined;
+}
+
+/**
+ * Actor-first, one-event notification row used when root-item grouping is off.
+ * It deliberately marks only this event as read or archived so sibling activity
+ * on the same issue or PR remains visible.
+ */
+export function NotificationActivityRow({
+  item,
+  event,
+  actions,
+  currentView,
+  resolvedMap,
+}: {
+  item: ThreadNotificationItem;
+  event: NostrEvent;
+  actions: NotificationActions;
+  currentView: ViewTab;
+  resolvedMap?: Map<string, ResolvedIssueLite>;
+}) {
+  const activeAccount = useActiveAccount();
+  const rootEvent = useRootEvent(item.rootId);
+  const resolved = resolvedMap?.get(item.rootId);
+  const rootType = inferRootType(item);
+  const title = resolved?.currentSubject ?? resolveTitle(rootEvent, item);
+  const repoCoord = resolveRepoCoord(rootEvent, item);
+  const isOwnRepository = repoCoord
+    ? repoOwnerPubkey(repoCoord) === activeAccount?.pubkey
+    : false;
+  const isUnread = item.unreadEventIds.includes(event.id);
+  const isArchived = item.archivedEventIds.includes(event.id);
+  const lastActive = useRelativeTime(event.created_at);
+  const nevent = eventIdToNevent(item.rootId);
+  const linkPath = buildNotificationLink(nevent, {
+    ...item,
+    unreadEventIds: isUnread ? [event.id] : [],
+  });
+
+  return (
+    <li
+      className={cn(
+        "group transition-colors",
+        isUnread
+          ? "border-l-2 border-l-pink-500 bg-accent/30 hover:bg-accent/50"
+          : "border-l-2 border-l-transparent hover:bg-accent/20",
+      )}
+    >
+      <div className="flex items-start">
+        <Link
+          to={linkPath}
+          className="flex min-w-0 flex-1 items-start gap-3 px-3 py-3"
+          onClick={() => isUnread && actions.markEventAsRead(event.id)}
+        >
+          <div className="w-2 shrink-0 pt-2.5">
+            {isUnread && <div className="h-2 w-2 rounded-full bg-pink-500" />}
+          </div>
+          <UserAvatar pubkey={event.pubkey} size="md" noHoverCard />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm leading-5">
+              <UserName pubkey={event.pubkey} />{" "}
+              <span className="text-muted-foreground">
+                {activityVerb(event)}
+              </span>{" "}
+              <span
+                className={cn(
+                  isUnread
+                    ? "font-medium text-foreground"
+                    : "text-foreground/80",
+                )}
+              >
+                {title}
+              </span>
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {lastActive}
+              </span>
+              <span className="text-xs text-muted-foreground/40">&middot;</span>
+              {resolved ? (
+                <StatusIcon
+                  status={resolved.status}
+                  variant={
+                    rootType === "patch"
+                      ? "patch"
+                      : rootType === "pr"
+                        ? "pr"
+                        : "issue"
+                  }
+                  className="h-4 w-4"
+                />
+              ) : (
+                <RootTypeIcon type={rootType} compact={false} />
+              )}
+              {repoCoord && (
+                <>
+                  <span className="text-xs text-muted-foreground/40">
+                    &middot;
+                  </span>
+                  <RepoBadge
+                    coord={repoCoord}
+                    repoNameOnly={isOwnRepository}
+                    asSpan
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        </Link>
+        <div className="hidden shrink-0 items-center gap-1 self-center pr-3 md:group-hover:flex">
+          {isUnread && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => actions.markEventAsRead(event.id)}
+              title="Mark activity as read"
+            >
+              <Eye className="mr-1 h-3 w-3" />
+              Read
+            </Button>
+          )}
+          {currentView === "inbox" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => actions.markEventAsArchived(event.id)}
+              title="Archive activity"
+            >
+              <Archive className="mr-1 h-3 w-3" />
+              Archive
+            </Button>
+          )}
+          {currentView === "archived" && isArchived && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => actions.markEventAsUnarchived(event.id)}
+              title="Move activity to inbox"
+            >
+              <ArchiveRestore className="mr-1 h-3 w-3" />
+              Inbox
             </Button>
           )}
         </div>

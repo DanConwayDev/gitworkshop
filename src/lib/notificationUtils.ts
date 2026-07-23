@@ -121,7 +121,7 @@ export function resolveRepoCoord(
 export interface NotificationSummary {
   /** Always-visible purpose label, e.g. "new issue", "new PR" */
   purpose: string | undefined;
-  /** Unread activity text, e.g. "merged", "3 new comments" */
+  /** Unread activity text, e.g. "merged", "3 unread" */
   unreadText: string | undefined;
   hasMerge: boolean;
   hasClosed: boolean;
@@ -205,9 +205,7 @@ export function buildNotificationSummary(
   else if (reopened) parts.push("reopened");
   if (newRevision) parts.push("new revision");
   if (commentCount > 0) {
-    parts.push(
-      `${commentCount} new ${commentCount === 1 ? "comment" : "comments"}`,
-    );
+    parts.push(`${commentCount} unread`);
   }
   if (coverNoteCount > 0) {
     parts.push(
@@ -252,7 +250,7 @@ export function getCommenters(item: NotificationItem): string[] {
   for (const ev of item.events) {
     pubkeys.add(ev.pubkey);
   }
-  return Array.from(pubkeys).slice(0, 5);
+  return Array.from(pubkeys);
 }
 
 export function getActorPubkeys(
