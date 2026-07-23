@@ -13,10 +13,20 @@
  */
 
 import { combineLatest, of, type Observable } from "rxjs";
-import { auditTime, map, switchMap } from "rxjs/operators";
+import {
+  auditTime,
+  distinctUntilChanged,
+  map,
+  switchMap,
+} from "rxjs/operators";
 import type { Model } from "applesauce-core/event-store";
 import type { NostrEvent } from "nostr-tools";
-import { REPO_KIND } from "@/lib/nip34";
+import {
+  getCommentRootPointer,
+  getZapEventPointer,
+  isCommentEventPointer,
+} from "applesauce-common/helpers";
+import { REPO_KIND, COMMENT_KIND } from "@/lib/nip34";
 import {
   buildNotificationFilters,
   buildRepoStarFilter,
@@ -62,6 +72,36 @@ export function NotificationModel(
     // Thread events — static filters (includes zap receipts on thread items)
     const threadEvents$ = store.timeline(threadFilters);
 
+    // Zap receipts identify their target comment, rather than that comment's
+    // thread root. Watch those target comments even when they would not match
+    // the notification filters (for example, a comment authored by us).
+    const zappedCommentEvents$ = threadEvents$.pipe(
+      map((events) =>
+        [
+          ...new Set(
+            (events as NostrEvent[])
+              .filter((event) => event.kind === ZAP_RECEIPT_KIND)
+              .flatMap((event) => {
+                const target = getZapEventPointer(event);
+                return target ? [target.id] : [];
+              }),
+          ),
+        ].sort(),
+      ),
+      distinctUntilChanged(
+        (previous, current) =>
+          previous.length === current.length &&
+          previous.every((id, index) => id === current[index]),
+      ),
+      switchMap((ids) =>
+        ids.length > 0
+          ? (store.timeline([
+              { kinds: [COMMENT_KIND], ids },
+            ]) as unknown as Observable<NostrEvent[]>)
+          : of([] as NostrEvent[]),
+      ),
+    );
+
     // Repo star events — reactive: re-subscribes to the store timeline
     // whenever the user's repo list changes, so new stars are picked up
     // without needing an unrelated re-emit to trigger a snapshot.
@@ -90,6 +130,7 @@ export function NotificationModel(
 
     return combineLatest([
       threadEvents$,
+      zappedCommentEvents$,
       readState$,
       repoStarEvents$,
       repoZapEvents$,
@@ -102,6 +143,7 @@ export function NotificationModel(
       map(
         ([
           threadEventsRaw,
+          zappedCommentEvents,
           readState,
           starEventsRaw,
           zapEventsRaw,
@@ -109,8 +151,18 @@ export function NotificationModel(
           nonGitEventIds,
         ]) => {
           const allThreadEvents = threadEventsRaw as NostrEvent[];
+          const commentEvents = zappedCommentEvents as NostrEvent[];
           const allStarEvents = starEventsRaw as NostrEvent[];
           const allRepoZapEvents = zapEventsRaw as NostrEvent[];
+
+          const commentRootMap = new Map<string, string>();
+          for (const event of [...allThreadEvents, ...commentEvents]) {
+            if (event.kind !== COMMENT_KIND) continue;
+            const rootPointer = getCommentRootPointer(event);
+            if (rootPointer && isCommentEventPointer(rootPointer)) {
+              commentRootMap.set(event.id, rootPointer.id);
+            }
+          }
 
           // Separate thread zaps from repo zaps already handled above.
           // Repo zap receipts are those with k=REPO_KIND OR with an #a tag
@@ -134,6 +186,7 @@ export function NotificationModel(
             [...nonZapThreadEvents, ...threadZapEvents],
             readState,
             pubkey,
+            commentRootMap,
             nonGitEventIds,
           );
           const socialItems = groupSocialNotifications(

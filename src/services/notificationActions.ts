@@ -7,6 +7,11 @@
  */
 
 import {
+  getCommentRootPointer,
+  getZapEventPointer,
+  isCommentEventPointer,
+} from "applesauce-common/helpers";
+import {
   buildNotificationFilters,
   buildRepoStarFilter,
   buildRepoZapFilter,
@@ -21,6 +26,7 @@ import {
   ZAP_RECEIPT_KIND,
   type NotificationReadState,
 } from "@/lib/notifications";
+import { COMMENT_KIND } from "@/lib/nip34";
 import { eventStore } from "@/services/nostr";
 import type { NostrEvent } from "nostr-tools";
 import type { NotificationStoreEntry } from "./notificationStore";
@@ -57,6 +63,35 @@ function getAllNotificationEvents(entry: NotificationStoreEntry): NostrEvent[] {
   return [...thread, ...stars, ...repoZaps];
 }
 
+/** Map locally available NIP-22 comments to their uppercase E thread roots. */
+function buildCommentRootMap(events: NostrEvent[]): Map<string, string> {
+  const zappedCommentIds = [
+    ...new Set(
+      events
+        .filter((event) => event.kind === ZAP_RECEIPT_KIND)
+        .flatMap((event) => {
+          const target = getZapEventPointer(event);
+          return target ? [target.id] : [];
+        }),
+    ),
+  ];
+  const zappedComments =
+    zappedCommentIds.length > 0
+      ? (eventStore.getByFilters([
+          { kinds: [COMMENT_KIND], ids: zappedCommentIds },
+        ]) as NostrEvent[])
+      : [];
+  const roots = new Map<string, string>();
+  for (const event of [...events, ...zappedComments]) {
+    if (event.kind !== COMMENT_KIND) continue;
+    const rootPointer = getCommentRootPointer(event);
+    if (rootPointer && isCommentEventPointer(rootPointer)) {
+      roots.set(event.id, rootPointer.id);
+    }
+  }
+  return roots;
+}
+
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
@@ -85,8 +120,11 @@ function filterEventsForRootId(
         ev.tags.some(([t, v]) => t === "a" && v === coord),
     );
   }
+  const commentRootMap = buildCommentRootMap(allEvents);
   return allEvents.filter(
-    (ev) => ev.pubkey !== selfPubkey && getNotificationRootId(ev) === rootId,
+    (ev) =>
+      ev.pubkey !== selfPubkey &&
+      getNotificationRootId(ev, commentRootMap) === rootId,
   );
 }
 
