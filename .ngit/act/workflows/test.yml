@@ -104,5 +104,6 @@ jobs:
           : "${NETLIFY_SITE_ID:?Set the NETLIFY_SITE_ID secret.}"
           npx --yes netlify-cli@26.2.0 deploy \
             --prod \
+            --no-build \
             --dir=dist \
             --message="ngit act $GITHUB_SHA"
