@@ -7,6 +7,8 @@
 - Preserve percent-encoded repository identifiers and the current relay hint in repository sub-page links.
 - Resolve repository relay hints for localhost, including plaintext `ws://` local relays.
 - Add Android NIP-55 login with Amber.
+- Fix notifications: add an ungrouped activity mode with one row per notification, and correct grouping, unread state, and actor displays for stars, zaps, and nested comment threads.
+- Fix post-merge local file explorer state: resolve refs newly announced in the signed repository state before git servers update their advertised refs.
 
 ## [3.0.3]
 
