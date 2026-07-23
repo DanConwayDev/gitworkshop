@@ -32,6 +32,7 @@ import {
   actionMarkAsUnarchived,
   actionMarkEventAsRead,
   actionMarkEventAsArchived,
+  actionMarkEventAsUnarchived,
   actionMarkAllAsRead,
   actionMarkAllAsArchived,
 } from "@/services/notificationActions";
@@ -52,6 +53,7 @@ export interface NotificationActions {
   markAsUnarchived: (rootId: string) => void;
   markEventAsRead: (eventId: string) => void;
   markEventAsArchived: (eventId: string) => void;
+  markEventAsUnarchived: (eventId: string) => void;
   markAllAsRead: () => void;
   markAllAsArchived: () => void;
 }
@@ -205,6 +207,8 @@ export function useNotifications(): {
         entry && actionMarkEventAsRead(entry, eventId),
       markEventAsArchived: (eventId) =>
         entry && actionMarkEventAsArchived(entry, eventId),
+      markEventAsUnarchived: (eventId) =>
+        entry && actionMarkEventAsUnarchived(entry, eventId),
       markAllAsRead: () => entry && actionMarkAllAsRead(entry),
       markAllAsArchived: () => entry && actionMarkAllAsArchived(entry),
     }),

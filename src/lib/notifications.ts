@@ -118,6 +118,8 @@ export interface ThreadNotificationItem {
   unread: boolean;
   /** Whether this group is archived */
   archived: boolean;
+  /** IDs of the specific events that are archived (subset of events[].id). */
+  archivedEventIds: string[];
   /** Most recent event timestamp in this group */
   latestActivity: number;
   /**
@@ -146,6 +148,8 @@ export interface SocialNotificationItem {
   unread: boolean;
   /** Whether this group is archived */
   archived: boolean;
+  /** IDs of the specific events that are archived (subset of events[].id). */
+  archivedEventIds: string[];
   /** Most recent event timestamp in this group */
   latestActivity: number;
   /** Unread event IDs, oldest-first */
@@ -170,6 +174,8 @@ export interface RepoZapNotificationItem {
   unread: boolean;
   /** Whether this group is archived */
   archived: boolean;
+  /** IDs of the specific events that are archived (subset of events[].id). */
+  archivedEventIds: string[];
   /** Most recent event timestamp in this group */
   latestActivity: number;
   /** Unread event IDs, oldest-first */
@@ -543,6 +549,9 @@ export function groupNotifications(
     const archived = group.events.every((ev) =>
       isEventArchived(ev, state, archivedIdSet),
     );
+    const archivedEventIds = group.events
+      .filter((ev) => isEventArchived(ev, state, archivedIdSet))
+      .map((ev) => ev.id);
 
     // unreadEvents is already newest-first (filtered from group.events which is
     // sorted newest-first), so reversing gives oldest-first IDs without a
@@ -555,6 +564,7 @@ export function groupNotifications(
       events: group.events,
       unread,
       archived,
+      archivedEventIds,
       latestActivity: group.latestActivity,
       unreadEventIds,
     });
@@ -621,6 +631,9 @@ export function groupSocialNotifications(
     const archived = events.every((ev) =>
       isEventArchived(ev, state, archivedIdSet),
     );
+    const archivedEventIds = events
+      .filter((ev) => isEventArchived(ev, state, archivedIdSet))
+      .map((ev) => ev.id);
     // unreadEvents is newest-first; reverse gives oldest-first IDs
     const unreadEventIds = unreadEvents.map((ev) => ev.id).reverse();
 
@@ -631,6 +644,7 @@ export function groupSocialNotifications(
       events,
       unread,
       archived,
+      archivedEventIds,
       latestActivity,
       unreadEventIds,
     });
@@ -700,6 +714,9 @@ export function groupRepoZapNotifications(
     const archived = events.every((ev) =>
       isEventArchived(ev, state, archivedIdSet),
     );
+    const archivedEventIds = events
+      .filter((ev) => isEventArchived(ev, state, archivedIdSet))
+      .map((ev) => ev.id);
     // unreadEvents is newest-first; reverse gives oldest-first IDs
     const unreadEventIds = unreadEvents.map((ev) => ev.id).reverse();
 
@@ -717,6 +734,7 @@ export function groupRepoZapNotifications(
       events,
       unread,
       archived,
+      archivedEventIds,
       latestActivity,
       unreadEventIds,
       totalSats,

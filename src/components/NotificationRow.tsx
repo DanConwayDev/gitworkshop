@@ -797,6 +797,7 @@ export function NotificationActivityRow({
     ? repoOwnerPubkey(repoCoord) === activeAccount?.pubkey
     : false;
   const isUnread = item.unreadEventIds.includes(event.id);
+  const isArchived = item.archivedEventIds.includes(event.id);
   const lastActive = useRelativeTime(event.created_at);
   const nevent = eventIdToNevent(item.rootId);
   const linkPath = buildNotificationLink(nevent, {
@@ -897,6 +898,18 @@ export function NotificationActivityRow({
             >
               <Archive className="mr-1 h-3 w-3" />
               Archive
+            </Button>
+          )}
+          {currentView === "archived" && isArchived && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => actions.markEventAsUnarchived(event.id)}
+              title="Move activity to inbox"
+            >
+              <ArchiveRestore className="mr-1 h-3 w-3" />
+              Inbox
             </Button>
           )}
         </div>

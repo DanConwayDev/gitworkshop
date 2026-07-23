@@ -70,25 +70,40 @@ export default function NotificationsPage() {
   }, [items, currentView]);
 
   const displayEntries = useMemo<NotificationDisplayEntry[] | undefined>(() => {
-    if (!filteredItems) return undefined;
+    if (!items || !filteredItems) return undefined;
     if (groupByRootItem) {
       return filteredItems.map((item) => ({ type: "item", item }));
     }
 
-    return filteredItems.flatMap<NotificationDisplayEntry>((item) => {
+    const entries = items.flatMap<NotificationDisplayEntry>((item) => {
       // Repository stars and zaps are intrinsically repository-level
       // notifications, so their existing grouping remains intact.
-      if (item.kind !== "thread") return [{ type: "item", item }];
+      if (item.kind !== "thread") {
+        return filteredItems.includes(item) ? [{ type: "item", item }] : [];
+      }
 
-      const events =
-        currentView === "inbox"
-          ? item.events.filter((event) =>
-              item.unreadEventIds.includes(event.id),
-            )
-          : item.events;
+      const archivedIds = new Set(item.archivedEventIds);
+      const events = item.events.filter((event) => {
+        const isArchived = archivedIds.has(event.id);
+        return currentView === "inbox"
+          ? !isArchived
+          : currentView === "archived"
+            ? isArchived
+            : true;
+      });
       return events.map((event) => ({ type: "activity", item, event }));
     });
-  }, [currentView, filteredItems, groupByRootItem]);
+
+    // Grouped items are ordered by their latest activity. Once expanded, each
+    // activity needs its own global ordering before pagination.
+    return entries.sort((a, b) => {
+      const aTime =
+        a.type === "activity" ? a.event.created_at : a.item.latestActivity;
+      const bTime =
+        b.type === "activity" ? b.event.created_at : b.item.latestActivity;
+      return bTime - aTime;
+    });
+  }, [currentView, filteredItems, groupByRootItem, items]);
 
   // Pagination — reset currentPage when the list shrinks past it (#10)
   const totalPages = displayEntries
@@ -175,8 +190,8 @@ export default function NotificationsPage() {
           Group by root item
         </label>
         {currentView === "inbox" &&
-          filteredItems &&
-          filteredItems.length > 0 && (
+          displayEntries &&
+          displayEntries.length > 0 && (
             <div className="ml-auto flex items-center gap-2">
               <Button
                 variant="ghost"
@@ -202,7 +217,7 @@ export default function NotificationsPage() {
 
       {/* Notification list */}
       <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
-        {!filteredItems || (filteredItems.length === 0 && history.loading) ? (
+        {!displayEntries || (displayEntries.length === 0 && history.loading) ? (
           // Loading skeleton — also shown when list is empty but still fetching
           // to avoid a flash of the empty state before the first page arrives
           <ul className="divide-y divide-border/40">
@@ -210,7 +225,7 @@ export default function NotificationsPage() {
               <NotificationSkeleton key={i} />
             ))}
           </ul>
-        ) : filteredItems.length === 0 ? (
+        ) : displayEntries.length === 0 ? (
           // Empty state
           <div className="py-16 px-8 text-center">
             <div className="max-w-sm mx-auto space-y-3">

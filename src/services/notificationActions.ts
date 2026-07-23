@@ -234,6 +234,43 @@ export function actionMarkEventAsArchived(
   });
 }
 
+/** Restore one notification event without restoring its sibling activity. */
+export function actionMarkEventAsUnarchived(
+  entry: NotificationStoreEntry,
+  eventId: string,
+): void {
+  updateReadState(entry, (prev) => {
+    const allEvents = getAllNotificationEvents(entry);
+    const event = allEvents.find(
+      (candidate) =>
+        candidate.id === eventId && candidate.pubkey !== entry.pubkey,
+    );
+    if (!event || !isEventArchived(event, prev, new Set(prev.ai))) return prev;
+
+    let newAi = prev.ai.filter((id) => id !== eventId);
+    let newAb = prev.ab;
+
+    if (event.created_at <= prev.ab) {
+      newAb = event.created_at - 1;
+      const reMarkIds = allEvents
+        .filter(
+          (candidate) =>
+            candidate.pubkey !== entry.pubkey &&
+            candidate.created_at > newAb &&
+            candidate.created_at <= prev.ab &&
+            candidate.id !== eventId &&
+            !newAi.includes(candidate.id),
+        )
+        .map((candidate) => candidate.id);
+      newAi = [...newAi, ...reMarkIds];
+    }
+
+    const updated = { ...prev, ab: newAb, ai: newAi };
+    const cutoff = advanceArchivedCutoff(allEvents, updated, entry.pubkey);
+    return { ...updated, ...cutoff };
+  });
+}
+
 export function actionMarkAsUnarchived(
   entry: NotificationStoreEntry,
   rootId: string,
