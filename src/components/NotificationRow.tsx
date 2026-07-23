@@ -471,7 +471,15 @@ function SocialNotificationRow({
   compact: boolean;
   currentView: ViewTab;
 }) {
-  const actorPubkeys = useMemo(() => getActorPubkeys(item), [item]);
+  const actorPubkeys = useMemo(() => {
+    if (!item.unread) return getActorPubkeys(item);
+
+    const unreadEventIds = new Set(item.unreadEventIds);
+    return getActorPubkeys({
+      ...item,
+      events: item.events.filter((event) => unreadEventIds.has(event.id)),
+    });
+  }, [item]);
   const lastActive = useRelativeTime(item.latestActivity);
   const linkPath = repoCoordToNaddrPath(item.repoCoord);
 
