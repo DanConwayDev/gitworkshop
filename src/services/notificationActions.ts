@@ -7,6 +7,10 @@
  */
 
 import {
+  getCommentRootPointer,
+  isCommentEventPointer,
+} from "applesauce-common/helpers";
+import {
   buildNotificationFilters,
   buildRepoStarFilter,
   buildRepoZapFilter,
@@ -21,6 +25,7 @@ import {
   ZAP_RECEIPT_KIND,
   type NotificationReadState,
 } from "@/lib/notifications";
+import { COMMENT_KIND } from "@/lib/nip34";
 import { eventStore } from "@/services/nostr";
 import type { NostrEvent } from "nostr-tools";
 import type { NotificationStoreEntry } from "./notificationStore";
@@ -57,6 +62,24 @@ function getAllNotificationEvents(entry: NotificationStoreEntry): NostrEvent[] {
   return [...thread, ...stars, ...repoZaps];
 }
 
+/**
+ * Resolve zaps targeting NIP-22 comments to their thread root. This mirrors
+ * NotificationModel's grouping so root-level actions affect every event that
+ * is displayed in the same grouped notification.
+ */
+function buildCommentRootMap(events: NostrEvent[]): Map<string, string> {
+  const commentRootMap = new Map<string, string>();
+  for (const event of events) {
+    if (event.kind !== COMMENT_KIND) continue;
+
+    const rootPointer = getCommentRootPointer(event);
+    if (rootPointer && isCommentEventPointer(rootPointer)) {
+      commentRootMap.set(event.id, rootPointer.id);
+    }
+  }
+  return commentRootMap;
+}
+
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
@@ -85,8 +108,11 @@ function filterEventsForRootId(
         ev.tags.some(([t, v]) => t === "a" && v === coord),
     );
   }
+  const commentRootMap = buildCommentRootMap(allEvents);
   return allEvents.filter(
-    (ev) => ev.pubkey !== selfPubkey && getNotificationRootId(ev) === rootId,
+    (ev) =>
+      ev.pubkey !== selfPubkey &&
+      getNotificationRootId(ev, commentRootMap) === rootId,
   );
 }
 
