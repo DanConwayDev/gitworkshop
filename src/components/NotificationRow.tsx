@@ -513,17 +513,9 @@ function SocialNotificationRow({
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              {actorPubkeys.slice(0, 5).map((pk) => (
-                <UserAvatar
-                  key={pk}
-                  pubkey={pk}
-                  size="sm"
-                  className="h-5 w-5 text-[8px]"
-                />
-              ))}
-              {actorPubkeys.length > 5 && (
-                <span className="text-xs text-muted-foreground">
-                  +{actorPubkeys.length - 5}
+              {actorPubkeys[0] && (
+                <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  <ActivityActors pubkeys={actorPubkeys} />
                 </span>
               )}
               <span
