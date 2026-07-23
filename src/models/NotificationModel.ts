@@ -23,8 +23,8 @@ import type { Model } from "applesauce-core/event-store";
 import type { NostrEvent } from "nostr-tools";
 import { getZapEventPointer } from "applesauce-common/helpers";
 import { REPO_KIND } from "@/lib/nip34";
-import { getParentId } from "@/lib/threadTree";
 import {
+  buildThreadEventMap,
   buildNotificationFilters,
   buildRepoStarFilter,
   buildRepoZapFilter,
@@ -71,7 +71,7 @@ export function NotificationModel(
 
     // Zap receipts identify their target event rather than its thread root.
     // Watch targets that do not independently match notification filters.
-    const zappedCommentEvents$ = threadEvents$.pipe(
+    const zappedTargetEvents$ = threadEvents$.pipe(
       map((events) =>
         [
           ...new Set(
@@ -124,7 +124,7 @@ export function NotificationModel(
 
     return combineLatest([
       threadEvents$,
-      zappedCommentEvents$,
+      zappedTargetEvents$,
       readState$,
       repoStarEvents$,
       repoZapEvents$,
@@ -137,7 +137,7 @@ export function NotificationModel(
       map(
         ([
           threadEventsRaw,
-          zappedCommentEvents,
+          zappedTargetEvents,
           readState,
           starEventsRaw,
           zapEventsRaw,
@@ -145,32 +145,14 @@ export function NotificationModel(
           nonGitEventIds,
         ]) => {
           const allThreadEvents = threadEventsRaw as NostrEvent[];
-          const commentEvents = zappedCommentEvents as NostrEvent[];
+          const targetEvents = zappedTargetEvents as NostrEvent[];
           const allStarEvents = starEventsRaw as NostrEvent[];
           const allRepoZapEvents = zapEventsRaw as NostrEvent[];
 
-          const threadEventsById = new Map(
-            [...allThreadEvents, ...commentEvents].map((event) => [
-              event.id,
-              event,
-            ]),
+          const threadEventsById = buildThreadEventMap(
+            [...allThreadEvents, ...targetEvents],
+            (id) => (store.getByFilters([{ ids: [id] }]) as NostrEvent[])[0],
           );
-          const pendingEvents = [...threadEventsById.values()];
-          while (pendingEvents.length > 0) {
-            const event = pendingEvents.pop();
-            if (!event) continue;
-            const parentId = getParentId(event);
-            if (parentId && !threadEventsById.has(parentId)) {
-              const parent = store.getByFilters([
-                { ids: [parentId] },
-              ]) as NostrEvent[];
-              const parentEvent = parent[0];
-              if (parentEvent) {
-                threadEventsById.set(parentEvent.id, parentEvent);
-                pendingEvents.push(parentEvent);
-              }
-            }
-          }
 
           // Separate thread zaps from repo zaps already handled above.
           // Repo zap receipts are those with k=REPO_KIND OR with an #a tag

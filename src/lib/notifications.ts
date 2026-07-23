@@ -400,6 +400,34 @@ function resolveThreadRootId(
 }
 
 /**
+ * Index events and every locally available parent needed to resolve a thread
+ * root. Callers provide the store-specific synchronous event lookup.
+ */
+export function buildThreadEventMap(
+  events: Iterable<NostrEvent>,
+  getEvent: (id: string) => NostrEvent | undefined,
+): Map<string, NostrEvent> {
+  const threadEvents = new Map([...events].map((event) => [event.id, event]));
+  const pendingEvents = [...threadEvents.values()];
+
+  while (pendingEvents.length > 0) {
+    const event = pendingEvents.pop();
+    if (!event) continue;
+
+    const parentId = getParentId(event);
+    if (parentId && !threadEvents.has(parentId)) {
+      const parent = getEvent(parentId);
+      if (parent) {
+        threadEvents.set(parent.id, parent);
+        pendingEvents.push(parent);
+      }
+    }
+  }
+
+  return threadEvents;
+}
+
+/**
  * Extract the root issue/PR/patch event ID from a thread notification event.
  *
  * - If the event IS a root (issue/PR/patch kind), its own ID is the root.

@@ -9,6 +9,7 @@
 import { getZapEventPointer } from "applesauce-common/helpers";
 import {
   buildNotificationFilters,
+  buildThreadEventMap,
   buildRepoStarFilter,
   buildRepoZapFilter,
   getNotificationRootId,
@@ -22,7 +23,6 @@ import {
   ZAP_RECEIPT_KIND,
   type NotificationReadState,
 } from "@/lib/notifications";
-import { getParentId } from "@/lib/threadTree";
 import { eventStore } from "@/services/nostr";
 import type { NostrEvent } from "nostr-tools";
 import type { NotificationStoreEntry } from "./notificationStore";
@@ -59,8 +59,10 @@ function getAllNotificationEvents(entry: NotificationStoreEntry): NostrEvent[] {
   return [...thread, ...stars, ...repoZaps];
 }
 
-/** Index locally available notification target events and their parent chains. */
-function buildThreadEventMap(events: NostrEvent[]): Map<string, NostrEvent> {
+/** Include zap targets before indexing their locally available parent chains. */
+function buildNotificationThreadEventMap(
+  events: NostrEvent[],
+): Map<string, NostrEvent> {
   const zappedTargetIds = [
     ...new Set(
       events
@@ -75,26 +77,10 @@ function buildThreadEventMap(events: NostrEvent[]): Map<string, NostrEvent> {
     zappedTargetIds.length > 0
       ? (eventStore.getByFilters([{ ids: zappedTargetIds }]) as NostrEvent[])
       : [];
-  const threadEventsById = new Map(
-    [...events, ...zappedTargets].map((event) => [event.id, event]),
+  return buildThreadEventMap(
+    [...events, ...zappedTargets],
+    (id) => (eventStore.getByFilters([{ ids: [id] }]) as NostrEvent[])[0],
   );
-  const pendingEvents = [...threadEventsById.values()];
-  while (pendingEvents.length > 0) {
-    const event = pendingEvents.pop();
-    if (!event) continue;
-    const parentId = getParentId(event);
-    if (parentId && !threadEventsById.has(parentId)) {
-      const parent = eventStore.getByFilters([
-        { ids: [parentId] },
-      ]) as NostrEvent[];
-      const parentEvent = parent[0];
-      if (parentEvent) {
-        threadEventsById.set(parentEvent.id, parentEvent);
-        pendingEvents.push(parentEvent);
-      }
-    }
-  }
-  return threadEventsById;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +111,7 @@ function filterEventsForRootId(
         ev.tags.some(([t, v]) => t === "a" && v === coord),
     );
   }
-  const threadEvents = buildThreadEventMap(allEvents);
+  const threadEvents = buildNotificationThreadEventMap(allEvents);
   return allEvents.filter(
     (ev) =>
       ev.pubkey !== selfPubkey &&
