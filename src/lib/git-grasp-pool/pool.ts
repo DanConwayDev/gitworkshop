@@ -42,7 +42,11 @@ import {
   isNonHttpUrl,
 } from "./git-http";
 import { UrlStateManager, UrlTracker } from "./url-state";
-import { PROVISIONING_BACKOFF_MAX_MS, StateEventManager } from "./state-event";
+import {
+  PROVISIONING_BACKOFF_MAX_MS,
+  StateEventManager,
+  orderStateCommitUrls,
+} from "./state-event";
 import {
   pushRefUpdateToGraspServers,
   type PushDeliverySummary,
@@ -1106,25 +1110,19 @@ export class GitGraspPool {
     readmeContent: string | null;
     readmeFilename: string | null;
   } | null> {
-    // Filter to URLs whose cached infoRefs match the state commit
-    const likelyUrls = urls.filter((url) => {
-      const cached = this.cache.peekInfoRefs(url);
-      if (!cached) return true;
-      const headRef = cached.symrefs["HEAD"];
-      const headCommit = headRef
-        ? cached.refs[headRef]
-        : Object.values(cached.refs)[0];
-      if (!headCommit) return true;
-      return (
-        headCommit.startsWith(commitHash) || commitHash.startsWith(headCommit)
-      );
-    });
+    // Rank servers whose advertised HEAD matches the announced commit first, but keep
+    // the rest in the attempt: a state commit that another maintainer has built on is
+    // no longer a tip, yet the server still serves it by SHA. Filtering those out was
+    // what turned a reachable commit into "not found on any git server".
+    const orderedUrls = orderStateCommitUrls(urls, commitHash, (url) =>
+      this.cache.peekInfoRefs(url),
+    );
 
-    if (likelyUrls.length === 0) return null;
+    if (orderedUrls.length === 0) return null;
 
     try {
       return await Promise.any(
-        likelyUrls.map(async (url) => {
+        orderedUrls.map(async (url) => {
           const result = await this.http.fetchCommit(
             url,
             commitHash,
